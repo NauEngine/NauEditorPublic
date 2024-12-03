@@ -102,9 +102,8 @@ if (WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/translations/editor_en.qm $<TARGET_FILE_DIR:NauEditor>/translations/editor_en.qm
         
         #copy engine dll`s
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${NAU_ROOT_DIR}/bin/$<CONFIG> $<TARGET_FILE_DIR:NauEditor>
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/bin/$<CONFIG> $<TARGET_FILE_DIR:NauEditor>
-
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:NauEditor>/plugins/NauAnimationClipAsset.dll $<TARGET_FILE_DIR:NauEditor>
 
         #copy usd dll's
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${PXR_LIB_DIR}/$<CONFIG> $<TARGET_FILE_DIR:NauEditor>
@@ -118,6 +117,12 @@ if (WIN32)
         
         #copy projects templates
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${NAU_ROOT_DIR}/project_templates $<TARGET_FILE_DIR:NauEditor>/project_templates
+
+        #copy sdk
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${NAU_ROOT_DIR}/include $<TARGET_FILE_DIR:NauEditor>/NauEngineSDK/include
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${NAU_ROOT_DIR}/lib $<TARGET_FILE_DIR:NauEditor>/NauEngineSDK/lib
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${NAU_ROOT_DIR}/bin $<TARGET_FILE_DIR:NauEditor>/NauEngineSDK/bin
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${NAU_ROOT_DIR}/cmake $<TARGET_FILE_DIR:NauEditor>/NauEngineSDK/cmake
     )
 
     foreach(Qt6Lib ${Qt6_deploy_libs})

@@ -6,9 +6,9 @@ import subprocess
 import pathlib
 import os
 
-if len(sys.argv) < 7:
-    print('Usage: make_installer.py platform(win64) '
-        'EXE_DIR(where files are taken from) OUT_FILENAME(installer file name) SOURCE(path to Engine source) CONFIG(Debug or Release) VERSION(product version)')
+if len(sys.argv) < 8:
+    print('Usage: installer.py platform(win64) '
+        'EXE_DIR(where files are taken from) OUT_FILENAME(installer file name) SOURCE(path to Engine source) CONFIG(Debug or Release) VERSION(product version) TOOLCHAIN(path to toolchain)')
     exit(1)
 
 def validate_path(path) :
@@ -21,15 +21,16 @@ if __name__ == "__main__":
     nausource = validate_path(sys.argv[4])
     config = sys.argv[5]
     version = sys.argv[6]
+    toolchain = validate_path(sys.argv[7])
 
-    print('make_installer.py platform({0}) EXE_DIR({1}) OUT_FILENAME({2}) SOURCE({3}) CONFIG({4}) VERSION({5})'.format(platform, exe_dir, out_filename, nausource, config, version), flush=True)
+    print('installer.py platform({0}) EXE_DIR({1}) OUT_FILENAME({2}) SOURCE({3}) CONFIG({4}) VERSION({5}) TOOLCHAIN({6})'.format(platform, exe_dir, out_filename, nausource, config, version, toolchain), flush=True)
 
     platform_build_script = validate_path(os.path.join(os.getcwd(),
         platform, 'build.py'))
 
     if pathlib.Path(platform_build_script).exists():
         print('Building SDK for platform "{0}"'.format(platform), flush=True)
-        ret = subprocess.call(["python", platform_build_script, nausource, exe_dir, config])
+        ret = subprocess.call(["python", platform_build_script, nausource, exe_dir, config, toolchain])
         if ret != 0:
             print('Failed to build SDK')
             exit(ret)
