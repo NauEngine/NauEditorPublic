@@ -5,11 +5,12 @@ preset = 'win_vs2022_x64_dll'
 nau_engine_sdk = sys.argv[1]
 nau_editor_bin = sys.argv[2]
 config = sys.argv[3]
+toolchain = sys.argv[4]
 
 def do_engine_build() :
     print("Building NauEngineSDK", preset, config, nau_engine_sdk, nau_editor_bin, flush=True)
 
-    result = os.system("cmake --preset "+ preset + " -DNAU_CORE_SAMPLES=OFF -DNAU_CORE_TESTS=OFF")
+    result = os.system("cmake --preset " + preset + " -DNAU_CORE_SAMPLES=OFF -DNAU_CORE_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE=" + toolchain)
     if result != 0 :
         print("NauEngineSDK config failed with code", result, flush=True)
         sys.exit(result)
