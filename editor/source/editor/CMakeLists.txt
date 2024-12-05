@@ -123,6 +123,7 @@ if (WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${NAU_ROOT_DIR}/lib $<TARGET_FILE_DIR:NauEditor>/NauEngineSDK/lib
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${NAU_ROOT_DIR}/bin $<TARGET_FILE_DIR:NauEditor>/NauEngineSDK/bin
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${NAU_ROOT_DIR}/cmake $<TARGET_FILE_DIR:NauEditor>/NauEngineSDK/cmake
+        COMMAND ${CMAKE_COMMAND} -E copy ${NAU_ROOT_DIR}/NauEngineSDK.cmake $<TARGET_FILE_DIR:NauEditor>/NauEngineSDK/NauEngineSDK.cmake
     )
 
     foreach(Qt6Lib ${Qt6_deploy_libs})

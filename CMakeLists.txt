@@ -20,6 +20,10 @@ set(CMAKE_CXX_STANDARD 20)
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
 
 
+# Required packages
+find_package(Python REQUIRED)
+
+
 # Global config
 if(NOT DEFINED NauEditorFolder)
   set(NauEditorFolder "NauEditor")
@@ -52,6 +56,7 @@ endif()
 if (NOT DEFINED CMAKE_TOOLCHAIN_FILE)
   message(FATAL_ERROR "Toolchain not selected! Please define -DCMAKE_TOOLCHAIN_FILE")
 else()
+  cmake_path(SET CMAKE_TOOLCHAIN_FILE NORMALIZE "${CMAKE_TOOLCHAIN_FILE}")
   message(STATUS "Toolchain file: ${CMAKE_TOOLCHAIN_FILE}")
 endif()
 
@@ -64,9 +69,21 @@ if (EXISTS "${NAU_ROOT_DIR}")
 else()
   message(FATAL_ERROR "Unable to find SDK!")
 endif()
+set(NauEngineFolder "${NAU_ROOT_DIR}")
+
+if (NOT DEFINED NAU_BUILD_SAMPLES)
+  set(NAU_BUILD_SAMPLES TRUE)
+endif()
+message(STATUS "Samples build: ${NAU_BUILD_SAMPLES}")
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/$<CONFIG>)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>)
+
+set(CMAKE_MODULE_PATH
+  "${NauEngineFolder}"
+  "${CMAKE_SOURCE_DIR}/cmake/defaults"
+  "${CMAKE_SOURCE_DIR}/cmake/macros"
+)
 
 
 # Nau options
@@ -78,23 +95,21 @@ option(NAU_CORE_SAMPLES "Build core samples projects" ON)
 option(NAU_RTTI "Enable rtti support" OFF)
 option(NAU_EXCEPTIONS "Enable exception support" OFF)
 
+# Global options
 option(BUILD_SHARED_LIBS "Build shared libs" OFF)
 
-set(CMAKE_MODULE_PATH
-  "${NAU_ROOT_DIR}/cmake"
-  "${CMAKE_SOURCE_DIR}/cmake/defaults"
-  "${CMAKE_SOURCE_DIR}/cmake/macros"
-)
 
-
-include(defaults/UsdPackages)
+include(NauEngineSDK)
+include(UsdPackages)
 include(NauCommon)
 include(NauModule)
 include(NauGenFunctions)
 include(platformSpec/NauPlatformSetup)
 include(Packages)
 
-add_subdirectory("${NAU_ROOT_DIR}" "NauEngine")
+if (NAU_BUILD_SAMPLES)
+  nau_add_samples()
+endif()
 
 add_subdirectory(editor)
 add_subdirectory(installer)

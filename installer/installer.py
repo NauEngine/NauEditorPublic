@@ -8,7 +8,7 @@ import os
 
 if len(sys.argv) < 8:
     print('Usage: installer.py platform(win64) '
-        'EXE_DIR(where files are taken from) OUT_FILENAME(installer file name) SOURCE(path to Engine source) CONFIG(Debug or Release) VERSION(product version) TOOLCHAIN(path to toolchain)')
+        'EXE_DIR(where files are taken from) OUT_FILENAME(installer file name) SOURCE(path to Engine source) CONFIG(Debug or Release) TOOLCHAIN(path to toolchain) VERSION(product version)')
     exit(1)
 
 def validate_path(path) :
@@ -20,11 +20,13 @@ if __name__ == "__main__":
     out_filename = validate_path(sys.argv[3])
     nausource = validate_path(sys.argv[4])
     config = sys.argv[5]
-    version = sys.argv[6]
-    toolchain = validate_path(sys.argv[7])
+    toolchain = validate_path(sys.argv[6])
+    version = sys.argv[7]
 
-    print('installer.py platform({0}) EXE_DIR({1}) OUT_FILENAME({2}) SOURCE({3}) CONFIG({4}) VERSION({5}) TOOLCHAIN({6})'.format(platform, exe_dir, out_filename, nausource, config, version, toolchain), flush=True)
-
+    print('installer.py platform({0}) EXE_DIR({1}) OUT_FILENAME({2}) SOURCE({3}) CONFIG({4}) TOOLCHAIN({5}) VERSION({6})'.format(platform, exe_dir, out_filename, nausource, config, toolchain, version), flush=True)
+    '''
+    # TODO: check do we need this. 
+    #  For now we use prebuilded core without rebuilding it twice.
     platform_build_script = validate_path(os.path.join(os.getcwd(),
         platform, 'build.py'))
 
@@ -36,7 +38,7 @@ if __name__ == "__main__":
             exit(ret)
     else:
         print('For platform "{0}" SDK build tool was not implemented, skipping SDK build'.format(platform), flush=True)
-
+    '''
     platform_specified_script = validate_path(os.path.join(os.getcwd(),
         platform, 'make_installer.py'))
 
