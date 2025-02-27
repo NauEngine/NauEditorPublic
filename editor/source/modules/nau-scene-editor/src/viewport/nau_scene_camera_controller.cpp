@@ -23,7 +23,7 @@ public:
         , m_useCameraSpeed(useCameraSpeed)
     {
     }
-    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed) override;
+    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed, const float sensitivity) override;
 private:
     const float m_zoomDelta = 0;
     const bool m_useCameraSpeed = false;
@@ -43,7 +43,7 @@ public:
         , m_mouseDelta(static_cast<float>(mouseDelta.x()), static_cast<float>(mouseDelta.y()))
     {
     }
-    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed) override;
+    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed, const float sensitivity) override;
 
 private:
     nau::math::vec3 m_movementDirection;
@@ -64,7 +64,7 @@ public:
         , m_mouseDelta(static_cast<float>(mouseDelta.x()), static_cast<float>(mouseDelta.y()))
     {
     }
-    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed) override;
+    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed, const float sensitivity) override;
 private:
     nau::math::vec3 m_movementDirection;
     nau::math::vec2 m_mouseDelta;
@@ -84,7 +84,7 @@ public:
         , m_mouseDelta(static_cast<float>(mouseDelta.x()), static_cast<float>(mouseDelta.y()))
     {
     }
-    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed) override;
+    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed, const float sensitivity) override;
 private:
     nau::math::vec3 m_movementDirection;
     nau::math::vec2 m_mouseDelta;
@@ -92,13 +92,15 @@ private:
 
 namespace Nau
 {
-    static nau::math::quat rotateQuaternion(const nau::math::quat& cameraRotation, const nau::math::vec2& mouseDelta) noexcept
+    static nau::math::quat rotateQuaternion(const nau::math::quat& cameraRotation, const nau::math::vec2& mouseDelta, const float sensitivity) noexcept
     {
         using quat_t = nau::math::quat;
         using vec3_t = nau::math::vec3;
-
-        const quat_t rotationX{ quat_t::rotationX(-mouseDelta.getY() * 0.005f) };
-        const quat_t rotationY{ quat_t::rotationY(-mouseDelta.getX() * 0.005f) };
+        
+        const float mouseInputX = -mouseDelta.getX() * sensitivity;
+        const float mouseInputY = -mouseDelta.getY() * sensitivity;
+        const quat_t rotationX{ quat_t::rotationX(mouseInputY) };
+        const quat_t rotationY{ quat_t::rotationY(mouseInputX) };
         const quat_t cameraRotationWithX = cameraRotation * rotationX;
 
         const float THRESHOLD = std::sin(PI / 180.f * 6.f);
@@ -122,7 +124,7 @@ namespace Nau
 
 // ** NauCameraZoomAction
 
-nau::math::Transform NauCameraZoomAction::updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed)
+nau::math::Transform NauCameraZoomAction::updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed, const float sensitivity)
 {
     using vec3_t = nau::math::vec3;
 
@@ -139,7 +141,7 @@ nau::math::Transform NauCameraZoomAction::updateCameraMatrix(const nau::math::Tr
 
 // ** NauCameraOrthoMoveAction
 
-nau::math::Transform NauCameraOrthoMoveAction::updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed)
+nau::math::Transform NauCameraOrthoMoveAction::updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed, const float sensitivity)
 {
     using vec3_t = nau::math::vec3;
 
@@ -155,12 +157,12 @@ nau::math::Transform NauCameraOrthoMoveAction::updateCameraMatrix(const nau::mat
 
 // ** NauCameraFlyMoveAction
 
-nau::math::Transform NauCameraFlyMoveAction::updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed)
+nau::math::Transform NauCameraFlyMoveAction::updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed, const float sensitivity)
 {
     using quat_t = nau::math::quat;
     using vec3_t = nau::math::vec3;
 
-    const quat_t newCameraRotation = Nau::rotateQuaternion(currentTransform.getRotation(), -m_mouseDelta);
+    const quat_t newCameraRotation = Nau::rotateQuaternion(currentTransform.getRotation(), -m_mouseDelta, sensitivity);
     const float force = m_deltaTime * cameraSpeed * 10;
     const vec3_t direction{ Nau::rotateDirection(newCameraRotation, m_movementDirection * force) };
     const vec3_t cameraPosition{ currentTransform.getTranslation() + direction};
@@ -171,7 +173,7 @@ nau::math::Transform NauCameraFlyMoveAction::updateCameraMatrix(const nau::math:
 
 // ** NauCameraHorizontalMoveAction
 
-nau::math::Transform NauCameraHorizontalMoveAction::updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed)
+nau::math::Transform NauCameraHorizontalMoveAction::updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed, const float sensitivity)
 {
     using quat_t = nau::math::quat;
     using vec3_t = nau::math::vec3;
@@ -184,7 +186,7 @@ nau::math::Transform NauCameraHorizontalMoveAction::updateCameraMatrix(const nau
         const vec3_t globalUpVec = vec3_t{ rotationMatrix.getCol2() }.setY(0.f);
         cameraPosition += globalUpVec * deltaForward;
     }
-    const quat_t newCameraRotation = Nau::rotateQuaternion(currentTransform.getRotation(), -m_mouseDelta);
+    const quat_t newCameraRotation = Nau::rotateQuaternion(currentTransform.getRotation(), -m_mouseDelta, sensitivity);
 
     return { newCameraRotation, cameraPosition, currentTransform.getScale()};
 }
@@ -244,6 +246,7 @@ void NauSceneCameraController::updateCameraMovement(float deltaTime, const NauVi
         float forwardDirection = 0;
         float rightDirection = 0;
         float upDirection = 0;
+        
         if (input.isKeyDown(Qt::Key_W)) {
             forwardDirection -= 1.0;
         }
@@ -347,6 +350,11 @@ void NauSceneCameraController::changeCameraSpeed(float deltaSpeed)
     m_internalController.changeCameraSpeed(deltaSpeed);
 }
 
+void NauSceneCameraController::changeCameraSensitivity(float sensitivity)
+{
+    m_internalController.changeCameraSensitivity(sensitivity);
+}
+
 void NauSceneCameraController::focusOn(const nau::math::mat4& matrix, int distanceMeters )
 {
     m_internalController.focusOn(matrix, distanceMeters);
@@ -388,6 +396,7 @@ float NauSceneCameraController::calculateCameraBoost(bool shiftPressed) const
 
 NauSceneEditorCameraControllerInternal::NauSceneEditorCameraControllerInternal()
     : m_currentCameraSpeed(1.0f)
+    , m_currentCameraSensitivity(0.005f)
     , m_cameraBoost(1.0f)
     , m_cameraAcceleration(false)
     , m_cameraEasing(false)
@@ -397,8 +406,12 @@ NauSceneEditorCameraControllerInternal::NauSceneEditorCameraControllerInternal()
 
 void NauSceneEditorCameraControllerInternal::changeCameraSpeed(float deltaSpeed)
 {
-    m_currentCameraSpeed = std::clamp(m_currentCameraSpeed + deltaSpeed, CAMERA_MIN_SPEED, CAMERA_MAX_SPEED);
+    m_currentCameraSpeed = std::clamp(deltaSpeed, CAMERA_MIN_SPEED, CAMERA_MAX_SPEED);
+}
 
+void NauSceneEditorCameraControllerInternal::changeCameraSensitivity(float sensitivity)
+{
+    m_currentCameraSensitivity = std::clamp(sensitivity, CAMERA_MIN_SENSITIVITY, CAMERA_MAX_SENSITIVITY);
 }
 
 void NauSceneEditorCameraControllerInternal::setCameraSpeed(float speed)
@@ -409,6 +422,11 @@ void NauSceneEditorCameraControllerInternal::setCameraSpeed(float speed)
 float NauSceneEditorCameraControllerInternal::cameraSpeed() const
 {
     return m_currentCameraSpeed * m_cameraBoost;
+}
+
+float NauSceneEditorCameraControllerInternal::cameraSensitivity() const
+{
+    return m_currentCameraSensitivity;
 }
 
 void NauSceneEditorCameraControllerInternal::setCameraMatrix(const QMatrix4x3& matrix)
@@ -524,7 +542,7 @@ void NauSceneEditorCameraControllerInternal::updateMovement(NauCameraMoveActionA
         return;
     }
     
-    const auto newCameraMatrix = action->updateCameraMatrix(activeCamera->getTransform(), cameraSpeed());
+    const auto newCameraMatrix = action->updateCameraMatrix(activeCamera->getTransform(), cameraSpeed(), m_currentCameraSensitivity);
 
     activeCamera->setTranslation(newCameraMatrix.getTranslation());
     activeCamera->setRotation(newCameraMatrix.getRotation());

@@ -22,6 +22,8 @@
 
 #include <QSignalBlocker>
 
+#include "nau/shared/logger.h"
+
 
 // ** NauSceneCameraViewSettings
 
@@ -254,6 +256,7 @@ NauSceneCameraMovementSettings::NauSceneCameraMovementSettings(QWidget* parent)
     : NauWidget(parent)
     , m_layout(new NauLayoutVertical(this))
     , m_speed(new NauPropertyReal())
+    , m_sensitivity(new NauPropertyReal())
     , m_easing(new NauPropertyBool())
     , m_acceleration(new NauPropertyBool())
 {
@@ -277,6 +280,28 @@ NauSceneCameraMovementSettings::NauSceneCameraMovementSettings(QWidget* parent)
     });
 
     m_speed->setValue(DefaultSpeed);
+
+    // *** Sensitivity ***
+    m_sensitivity->setContentsMargins(WidgetMargins);
+    m_sensitivity->setLabel(tr("Sensitivity"));
+    m_sensitivity->setRange(0.0f, 1.0f);
+    m_sensitivity->setSingleStep(0.01f);
+    m_sensitivity->setParent(this);
+
+    connect(m_sensitivity, &NauPropertyReal::eventValueChanged, [this]()
+    {
+        const float sensitivity = m_sensitivity->getValue().convert<float>();
+        const float convertedSensitivity = sensitivity * CAMERA_SENSITIVITY_MULTIPLIER;
+        // TODO: Do not use camera controller here
+        // Bind UI changes to camera in NauUsdSceneEditor class
+        auto& sceneEditor = Nau::EditorServiceProvider().get<NauUsdSceneEditorInterface>();
+        auto sceneCameraController = dynamic_cast<NauSceneCameraController*>(sceneEditor.sceneCameraController().get());
+        if (sceneCameraController) {
+            sceneCameraController->changeCameraSensitivity(convertedSensitivity);
+        }
+    });
+    
+    m_sensitivity->setValue(DefaultSensitivity);
 
     // *** Easing ***
     m_easing->setLabel("Easing");
@@ -318,6 +343,7 @@ NauSceneCameraMovementSettings::NauSceneCameraMovementSettings(QWidget* parent)
     m_acceleration->setValue(DefaultAcceleration);
 
     m_layout->addWidget(m_speed);
+    m_layout->addWidget(m_sensitivity);
     m_layout->addWidget(m_easing);
     m_layout->addWidget(m_acceleration);
 }
@@ -333,11 +359,15 @@ void NauSceneCameraMovementSettings::updateMovement()
     }
 
     QSignalBlocker speedBlocker(m_speed);
+    QSignalBlocker sensitivityBlocker(m_sensitivity);
     QSignalBlocker easingBlocker(m_easing);
     QSignalBlocker accelerationBlocker(m_acceleration);
 
     const float speed = sceneCameraController->internalController().cameraSpeed();
     m_speed->setValue(speed);
+
+    const float sensitivity = sceneCameraController->internalController().cameraSensitivity();
+    m_sensitivity->setValue(sensitivity * 10.0f);
 
     const bool easing = sceneCameraController->internalController().cameraEasing();
     m_easing->setValue(easing);
@@ -463,6 +493,9 @@ QJsonObject NauSceneCameraSettingsWidget::save() const
     // Speed
     result["speed"] = m_movement->m_speed->getValue().convert<float>();
 
+    // Sensitivity
+    result["sensitivity"] = m_movement->m_sensitivity->getValue().convert<float>();
+
     // Easing
     result["easing"] = m_movement->m_easing->getValue().convert<bool>();
 
@@ -499,6 +532,9 @@ void NauSceneCameraSettingsWidget::load(const QJsonObject& data)
 
     // Speed
     m_movement->m_speed->setValue(static_cast<float>(data["speed"].toDouble()));
+
+    // Sensitivity
+    m_movement->m_sensitivity->setValue(static_cast<float>(data["sensitivity"].toDouble()));
 
     // Easing
     m_movement->m_easing->setValue(data["easing"].toBool());

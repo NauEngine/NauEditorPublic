@@ -338,8 +338,8 @@ NauPropertyAbstract::NauPropertyAbstract(NauWidget* parent)
 
 NauSingleRowPropertyBase::NauSingleRowPropertyBase(const std::string& propertyTitle, NauWidget* parent)
     : NauPropertyAbstract(parent)
-    , m_layout(new NauLayoutVertical(this))
     , m_contentLayout(new NauLayoutGrid())
+    , m_layout(new NauLayoutVertical(this))
     , m_label(new NauLabel(propertyTitle.c_str(), this))
 {
     setFixedHeight(Height);
@@ -357,6 +357,7 @@ NauSingleRowPropertyBase::NauSingleRowPropertyBase(const std::string& propertyTi
 
     m_label->setFont(Nau::Theme::current().fontObjectInspector());
     m_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    m_label->setFixedSize(m_label->width(), 16);
 
     // The property name always occupies 1/3 of the width of the inspector
     m_contentLayout->addWidget(m_label,0, 0);
@@ -388,6 +389,7 @@ NauMultiValueSpinBoxPropertyBase::NauMultiValueSpinBoxPropertyBase(const std::st
     , m_multiLineEdit(std::make_unique<NauMultiValueDoubleSpinBox>(parent, valuesNames))
 {
     setFixedHeight(Height);
+    
     connect(m_multiLineEdit.get(), &NauMultiValueDoubleSpinBox::eventValueChanged, this, &NauMultiValueSpinBoxPropertyBase::eventValueChanged);
 
     // Controllers typically occupy 2/3 of the width of the inspector

@@ -18,6 +18,7 @@ public:
 
     virtual void updateCameraMovement(float deltaTime, const NauViewportInput& input) = 0;
     virtual void changeCameraSpeed(float deltaSpeed) = 0;
+    virtual void changeCameraSensitivity(float sensitivity) = 0;
     virtual void focusOn(const nau::math::mat4& matrix, int distanceMeters = 5) = 0;
 
     virtual bool isCameraActive(const NauViewportInput& input) const = 0;

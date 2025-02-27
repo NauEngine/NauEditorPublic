@@ -40,6 +40,10 @@ constexpr int NAU_WIDGET_DECIMAL_PRECISION = 2;  // At the moment, for real numb
 constexpr float CAMERA_MAX_SPEED = 20.0f;
 constexpr float CAMERA_MIN_SPEED = 0.05f;
 
+constexpr float CAMERA_MAX_SENSITIVITY = 0.1f;
+constexpr float CAMERA_MIN_SENSITIVITY = 0.0f;
+constexpr float CAMERA_SENSITIVITY_MULTIPLIER = 0.1f;
+
 constexpr int CAMERA_MAX_FOV = 120;
 constexpr int CAMERA_MIN_FOV = 5;
 constexpr int CAMERA_DEFAULT_FOV = 60;

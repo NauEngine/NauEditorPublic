@@ -26,7 +26,7 @@ public:
 
     }
     virtual ~NauCameraMoveActionAbstract() = default;
-    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed) = 0;
+    virtual nau::math::Transform updateCameraMatrix(const nau::math::Transform& currentTransform, const float cameraSpeed, const float sensitivity) = 0;
 protected:
     const float m_deltaTime = 0;
 };
@@ -46,10 +46,12 @@ public:
     void startCameraBoost(float power);
     void stopCameraBoost();
     void changeCameraSpeed(float deltaSpeed);
+    void changeCameraSensitivity(float sensitivity);
     void focusOn(const nau::math::mat4& matrix, int distanceMeters = 5);
 
     void setCameraSpeed(float speed);
     float cameraSpeed() const;
+    float cameraSensitivity() const;
     void setCameraMatrix(const QMatrix4x3& matrix);
     QMatrix4x3 cameraMatrix() const;
     void setCameraFoV(int fov);
@@ -63,6 +65,7 @@ public:
 
 private:
     float m_currentCameraSpeed;
+    float m_currentCameraSensitivity;
     float m_cameraBoost;
     bool m_cameraAcceleration;
     bool m_cameraEasing;
@@ -87,6 +90,7 @@ class NauSceneCameraController final : public NauCameraControllerInterface
 public:
     void updateCameraMovement(float deltaTime, const NauViewportInput& input) override;
     void changeCameraSpeed(float deltaSpeed) override;
+    void changeCameraSensitivity(float sensitivity) override;
     void focusOn(const nau::math::mat4& matrix, int distanceMeters = 5) override;
 
     bool isCameraActive(const NauViewportInput& input) const override;

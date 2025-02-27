@@ -64,11 +64,13 @@ private:
     NauLayoutVertical* m_layout;
 
     NauPropertyReal* m_speed;
+    NauPropertyReal* m_sensitivity;
     NauPropertyBool* m_easing;
     NauPropertyBool* m_acceleration;
 
 private:
     inline static constexpr float DefaultSpeed = 1.f;
+    inline static constexpr float DefaultSensitivity = 0.5f;
     inline static constexpr bool DefaultEasing = false;
     inline static constexpr bool DefaultAcceleration = false;
     inline static constexpr QMargins WidgetMargins = { 16, 0, 16, 0 };
