@@ -45,6 +45,7 @@ void NauPlayCommands::pausePlay(const bool isPaused)
 void NauPlayCommands::stopPlay()
 {
     Nau::EditorEngine().stopPlay();
+    auto transform = Nau::EditorEngine().cameraManager()->activeCamera()->getTransform();
 
     const bool isPlaymode = false;
     auto& sceneEditor = Nau::EditorServiceProvider().get<NauSceneEditorInterface>();
@@ -57,5 +58,6 @@ void NauPlayCommands::stopPlay()
 
     if (uiEditor) {
         uiEditor->stopPlay();
-    } 
+    }
+    Nau::EditorEngine().cameraManager()->activeCamera()->setTransform(transform);
 }
