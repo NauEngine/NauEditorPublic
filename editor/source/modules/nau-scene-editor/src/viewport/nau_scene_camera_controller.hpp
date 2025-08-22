@@ -87,6 +87,7 @@ class NauSceneCameraController final : public NauCameraControllerInterface
 public:
     void updateCameraMovement(float deltaTime, const NauViewportInput& input) override;
     void changeCameraSpeed(float deltaSpeed) override;
+    void setCameraSpeed(float speed);
     void focusOn(const nau::math::mat4& matrix, int distanceMeters = 5) override;
 
     bool isCameraActive(const NauViewportInput& input) const override;

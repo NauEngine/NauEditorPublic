@@ -272,7 +272,7 @@ NauSceneCameraMovementSettings::NauSceneCameraMovementSettings(QWidget* parent)
         auto& sceneEditor = Nau::EditorServiceProvider().get<NauUsdSceneEditorInterface>();
         auto sceneCameraController = dynamic_cast<NauSceneCameraController*>(sceneEditor.sceneCameraController().get());
         if (sceneCameraController) {
-            sceneCameraController->changeCameraSpeed(speed);
+            sceneCameraController->setCameraSpeed(speed);
         }
     });
 
