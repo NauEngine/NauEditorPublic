@@ -29,12 +29,12 @@ void NauPlayCommands::startPlay()
     // Reimport project
     Nau::Editor().assetManager()->importAsset("");
 
-    // Change engine mode
-    Nau::EditorEngine().startPlay();
-
     // Change scene editor mode
     const bool isPlaymode = true;
     sceneEditor.changeMode(isPlaymode);
+
+    // Change engine mode
+    Nau::EditorEngine().startPlay();
 }
 
 void NauPlayCommands::pausePlay(const bool isPaused)
@@ -45,7 +45,6 @@ void NauPlayCommands::pausePlay(const bool isPaused)
 void NauPlayCommands::stopPlay()
 {
     Nau::EditorEngine().stopPlay();
-    auto transform = Nau::EditorEngine().cameraManager()->activeCamera()->getTransform();
 
     const bool isPlaymode = false;
     auto& sceneEditor = Nau::EditorServiceProvider().get<NauSceneEditorInterface>();
@@ -59,5 +58,4 @@ void NauPlayCommands::stopPlay()
     if (uiEditor) {
         uiEditor->stopPlay();
     }
-    Nau::EditorEngine().cameraManager()->activeCamera()->setTransform(transform);
 }
