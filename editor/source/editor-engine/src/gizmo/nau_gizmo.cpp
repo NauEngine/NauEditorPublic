@@ -166,6 +166,10 @@ void NauGizmoAbstract::handleMouseMove(nau::math::vec2 screenPoint)
         return;
     }
 
+    if (m_coordinateSpace == GizmoCoordinateSpace::World) {
+        m_basis3d.setUpper3x3(nau::math::mat3::identity());
+    }
+
     const float maxDownscale = 0.05;
     m_mousePos = screenPoint;
     nau::math::vec2 pivot2D;
@@ -281,9 +285,8 @@ void NauGizmoAbstract::deactivate()
 
 void NauGizmoAbstract::setBasis(const nau::math::mat4& basis)
 {
-    m_basis3d = basis;
-
     if (m_coordinateSpace == GizmoCoordinateSpace::Local) {
+        m_basis3d = basis;
         m_basis3d.setCol0(Vectormath::SSE::normalize(m_basis3d.getCol0()));
         m_basis3d.setCol1(Vectormath::SSE::normalize(m_basis3d.getCol1()));
         m_basis3d.setCol2(Vectormath::SSE::normalize(m_basis3d.getCol2()));
@@ -464,39 +467,53 @@ void NauRotateGizmo::startUse(nau::math::vec2 screenPoint)
     m_startPos2d = pos2d;    
 }
 
+void NauRotateGizmo::stopUse()
+{
+    NauGizmoAbstract::stopUse();
+    m_rotAngle = m_startRotAngle;
+    if (m_coordinateSpace == GizmoCoordinateSpace::World) {
+        m_basis3d.setUpper3x3(nau::math::mat3::identity());
+    }
+}
+
 void NauRotateGizmo::update3DBasis(const nau::math::vec3& delta)
 {
-    const nau::math::vec3 inverseDelta = -delta;
-    nau::math::mat3 deltaRotateMatrix = nau::math::mat3::rotationZYX({
-        inverseDelta.getX(),
-        inverseDelta.getY(),
-        inverseDelta.getZ()
-    });
+    if (m_coordinateSpace == GizmoCoordinateSpace::World) {
+        m_basis3d.setUpper3x3(nau::math::mat3::identity());
+    }
+    else {
+        const nau::math::vec3 inverseDelta = -delta;
+        nau::math::mat3 deltaRotateMatrix = nau::math::mat3::rotationZYX({
+            inverseDelta.getX(),
+            inverseDelta.getY(),
+            inverseDelta.getZ()
+            });
 
-    Vectormath::SSE::length(m_basis3d.getCol0());
+        Vectormath::SSE::length(m_basis3d.getCol0());
 
-    const float sx = Vectormath::SSE::length(m_basis3d.getCol0());
-    const float sy = Vectormath::SSE::length(m_basis3d.getCol1());
-    const float sz = Vectormath::SSE::length(m_basis3d.getCol2());
+        const float sx = Vectormath::SSE::length(m_basis3d.getCol0());
+        const float sy = Vectormath::SSE::length(m_basis3d.getCol1());
+        const float sz = Vectormath::SSE::length(m_basis3d.getCol2());
 
-    nau::math::mat3 rotateMatrix;
-    rotateMatrix.setCol0(m_basis3d.getCol0().getXYZ() / sx);
-    rotateMatrix.setCol1(m_basis3d.getCol1().getXYZ() / sy);
-    rotateMatrix.setCol2(m_basis3d.getCol2().getXYZ() / sz);
-    rotateMatrix *= deltaRotateMatrix;
-    
-    nau::math::mat4 newTransform;
-    newTransform.setCol0(nau::math::vec4(rotateMatrix.getCol0(), 0));
-    newTransform.setCol1(nau::math::vec4(rotateMatrix.getCol1(), 0));
-    newTransform.setCol2(nau::math::vec4(rotateMatrix.getCol2(), 0));
-    newTransform.setCol3(m_basis3d.getCol3());
-    NauMathMatrixUtils::orthonormalize(newTransform);
+        nau::math::mat3 rotateMatrix;
+        rotateMatrix.setCol0(m_basis3d.getCol0().getXYZ() / sx);
+        rotateMatrix.setCol1(m_basis3d.getCol1().getXYZ() / sy);
+        rotateMatrix.setCol2(m_basis3d.getCol2().getXYZ() / sz);
+        rotateMatrix *= deltaRotateMatrix;
 
-    newTransform[0] *= sx;
-    newTransform[1] *= sy;
-    newTransform[2] *= sz;
+        nau::math::mat4 newTransform;
+        newTransform.setCol0(nau::math::vec4(rotateMatrix.getCol0(), 0));
+        newTransform.setCol1(nau::math::vec4(rotateMatrix.getCol1(), 0));
+        newTransform.setCol2(nau::math::vec4(rotateMatrix.getCol2(), 0));
+        newTransform.setCol3(m_basis3d.getCol3());
+        NauMathMatrixUtils::orthonormalize(newTransform);
 
-    m_basis3d = newTransform;
+        newTransform[0] *= sx;
+        newTransform[1] *= sy;
+        newTransform[2] *= sz;
+
+        m_basis3d = newTransform;
+    }
 }
 
 nau::math::vec3 NauRotateGizmo::calculateDelta(const nau::math::vec2& delta, const nau::math::vec3& ax, const nau::math::vec3& ay, const nau::math::vec3& az)
