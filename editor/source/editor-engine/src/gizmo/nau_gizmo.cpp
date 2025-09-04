@@ -285,8 +285,8 @@ void NauGizmoAbstract::deactivate()
 
 void NauGizmoAbstract::setBasis(const nau::math::mat4& basis)
 {
+    m_basis3d = basis;
     if (m_coordinateSpace == GizmoCoordinateSpace::Local) {
-        m_basis3d = basis;
         m_basis3d.setCol0(Vectormath::SSE::normalize(m_basis3d.getCol0()));
         m_basis3d.setCol1(Vectormath::SSE::normalize(m_basis3d.getCol1()));
         m_basis3d.setCol2(Vectormath::SSE::normalize(m_basis3d.getCol2()));

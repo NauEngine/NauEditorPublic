@@ -163,6 +163,8 @@ NauRotateTool::NauRotateTool(NauUsdSelectionContainerPtr container)
 
 nau::math::mat4 NauRotateTool::transform(const nau::math::mat4& transform, const nau::math::vec3& delta) const
 {
+    GizmoCoordinateSpace::Local;
+
     const nau::math::vec3 inverseDelta = -delta;
     nau::math::mat3 deltaRotateMatrix = nau::math::mat3::rotationZYX({
         inverseDelta.getX(),
@@ -180,8 +182,12 @@ nau::math::mat4 NauRotateTool::transform(const nau::math::mat4& transform, const
     rotateMatrix.setCol0(transform.getCol0().getXYZ() / sx);
     rotateMatrix.setCol1(transform.getCol1().getXYZ() / sy);
     rotateMatrix.setCol2(transform.getCol2().getXYZ() / sz);
-    rotateMatrix *= deltaRotateMatrix;
-    
+
+    if (m_gizmo->coordinateSpace() == GizmoCoordinateSpace::Local)
+        rotateMatrix *= deltaRotateMatrix;
+    else
+        rotateMatrix = deltaRotateMatrix * rotateMatrix;
+
     nau::math::mat4 newTransform;
     newTransform.setCol0(nau::math::vec4(rotateMatrix.getCol0(), 0));
     newTransform.setCol1(nau::math::vec4(rotateMatrix.getCol1(), 0));
