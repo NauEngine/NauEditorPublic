@@ -322,7 +322,7 @@ void NauUsdSceneEditor::selectObject(QMouseEvent* event, float dpi)
         NED_CRITICAL("Selection failed. Object exist in engine scene and unsyncronized with editor scene!");
         m_selectionContainer->clear();
         return;
-    }
+    } else if (primPath.GetAsString() == m_selectionContainer->lastSelectedPath()) return;
 
     if (!isMultiplySelection) {
         const bool notify = false;
