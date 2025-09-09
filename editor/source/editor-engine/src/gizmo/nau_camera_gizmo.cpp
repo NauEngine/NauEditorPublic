@@ -32,6 +32,17 @@ static bool isPointInSphere(const nau::math::vec2& point, const nau::math::vec3&
     return true;
 }
 
+static bool isFrustumOnScreen(const nau::math::mat4& basis, const std::vector<nau::math::Point3>& frustumPoints)
+{
+    for (const auto& pt : frustumPoints) {
+        nau::math::vec3 worldPt = basis * Vectormath::SSE::Vector3(pt.getX(), pt.getY(), pt.getZ());
+        nau::math::vec2 screen;
+        if (Nau::Utils::worldToScreen(worldPt, screen)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // ** NauCameraGizmo
 
@@ -49,6 +60,11 @@ void NauCameraGizmo::setCallback(NauCameraGizmo::UpdateCallback callback)
 nau::math::vec3 NauCameraGizmo::calculateDelta(const nau::math::vec2& pivot2d, const nau::math::vec3& ax, const nau::math::vec3& ay, const nau::math::vec3& az)
 {
     return {};
+}
+
+bool NauCameraGizmo::isOnScreen() const
+{
+    return isFrustumOnScreen(m_basis3d, m_frustumPoints);
 }
 
 void NauCameraGizmo::renderInternal(const nau::math::mat4& transform, int selectedAxes)
