@@ -514,7 +514,9 @@ NauPropertyInt::NauPropertyInt(const std::string& propertyTitle, NauWidget* pare
 void NauPropertyInt::setValueInternal(const NauAnyType& value)
 {
     NED_ASSERT(value.canConvert<int>());
-    m_spinBox->setValue(value.convert<int>());
+    if (!m_spinBox->hasFocus()) {
+        m_spinBox->setValue(value.convert<int>());
+    }
 }
 
 NauAnyType NauPropertyInt::getValue()
@@ -548,7 +550,9 @@ NauPropertyReal::NauPropertyReal(const std::string& propertyTitle, NauWidget* pa
 void NauPropertyReal::setValueInternal(const NauAnyType& value)
 {
     NED_ASSERT(value.canConvert<float>());
-    m_spinBox->setValue(value.convert<float>());
+    if (!m_spinBox->hasFocus()) {
+        m_spinBox->setValue(value.convert<float>());
+    }
 }
 
 NauAnyType NauPropertyReal::getValue()
@@ -892,7 +896,9 @@ QString NauStringLineView::getValue() const
 
 void NauStringLineView::setValue(const QString& value)
 {
-    m_lineEdit->setText(value);
+    if (!m_lineEdit->hasFocus()) {
+        m_lineEdit->setText(value);
+    }
 }
 
 
