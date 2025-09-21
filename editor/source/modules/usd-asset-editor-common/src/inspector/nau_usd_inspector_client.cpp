@@ -184,9 +184,13 @@ void NauUsdInspectorClient::buildFromPrimInternal(PXR_NS::UsdPrim prim)
         const std::string componentTypeName = component.GetTypeName().GetString();
         //We are forced to postpone the construction of the UI so that the component has time to be created,
         //as its creation happens in asynchronous mode.
-        QTimer::singleShot(200, [this, component, componentTypeName, transformTokens]() {
+        QTimer* buildTimer = new QTimer(this);
+        buildTimer->setSingleShot(true);
+        connect(buildTimer, &QTimer::timeout, [this, component, componentTypeName, transformTokens]() {
             buildProperties(component, componentTypeName, transformTokens);
         });
+        m_componentBuildTimers.push_back(buildTimer);
+        buildTimer->start();
     }
 
     m_updateTimer.start(16);
@@ -339,6 +343,14 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
     }
 }
 
+void NauUsdInspectorClient::stopComponentBuildTimers() {
+    for (QTimer* timer : m_componentBuildTimers) {
+        timer->stop();
+        timer->deleteLater();
+    }
+    m_componentBuildTimers.clear();
+}
+
 void NauUsdInspectorClient::updateFromPrim(PXR_NS::UsdPrim prim)
 {
     QSignalBlocker blocker(this);
@@ -391,6 +403,7 @@ void NauUsdInspectorClient::clear()
     m_currentPrimPath = pxr::SdfPath::EmptyPath();
     m_currentScene = nullptr;
     m_inspector->clear();
+    stopComponentBuildTimers();
 }
 
 NauUsdPropertyAbstract* NauUsdInspectorClient::createPropertyWidget(const PXR_NS::SdfPath& primPath, const PXR_NS::VtValue& value, const std::string& rawTypeName, const std::string& metaInfo, PXR_NS::TfToken propertyName)
