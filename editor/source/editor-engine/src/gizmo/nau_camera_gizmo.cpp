@@ -35,12 +35,39 @@ static bool isPointInSphere(const nau::math::vec2& point, const nau::math::vec3&
 static bool isFrustumOnScreen(const nau::math::mat4& basis, const std::vector<nau::math::Point3>& frustumPoints)
 {
     for (const auto& pt : frustumPoints) {
-        nau::math::vec3 worldPt = basis * Vectormath::SSE::Vector3(pt.getX(), pt.getY(), pt.getZ());
+        nau::math::vec3 worldPt = basis.getCol3().getXYZ() + Vectormath::SSE::Vector3(pt.getX(), pt.getY(), pt.getZ());
         nau::math::vec2 screen;
         if (Nau::Utils::worldToScreen(worldPt, screen)) {
             return true;
         }
     }
+    
+    static const std::vector<std::pair<int, int>> frustumEdges = {
+        {0, 1}, {1, 3}, {3, 2}, {2, 0}, // near plane
+        {4, 5}, {5, 7}, {7, 6}, {6, 4}, // far plane
+        {0, 4}, {1, 5}, {2, 6}, {3, 7}  // connecting edges
+    };
+    
+    for (const auto& edge : frustumEdges) {
+        if (edge.first < frustumPoints.size() && edge.second < frustumPoints.size()) {
+            nau::math::vec3 world1 = basis.getCol3().getXYZ() + Vectormath::SSE::Vector3(
+                frustumPoints[edge.first].getX(), 
+                frustumPoints[edge.first].getY(), 
+                frustumPoints[edge.first].getZ()
+            );
+                
+            nau::math::vec3 world2 = basis.getCol3().getXYZ() + Vectormath::SSE::Vector3(
+                frustumPoints[edge.second].getX(), 
+                frustumPoints[edge.second].getY(), 
+                frustumPoints[edge.second].getZ()
+            );
+            
+            if (Nau::Utils::isLineSegmentVisible(world1, world2)) {
+                return true;
+            }
+        }
+    }
+    
     return false;
 }
 
