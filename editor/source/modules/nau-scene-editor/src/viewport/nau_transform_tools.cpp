@@ -163,8 +163,6 @@ NauRotateTool::NauRotateTool(NauUsdSelectionContainerPtr container)
 
 nau::math::mat4 NauRotateTool::transform(const nau::math::mat4& transform, const nau::math::vec3& delta) const
 {
-    GizmoCoordinateSpace::Local;
-
     const nau::math::vec3 inverseDelta = -delta;
     nau::math::mat3 deltaRotateMatrix = nau::math::mat3::rotationZYX({
         inverseDelta.getX(),

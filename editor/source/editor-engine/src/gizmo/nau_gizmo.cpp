@@ -489,8 +489,6 @@ void NauRotateGizmo::update3DBasis(const nau::math::vec3& delta)
             inverseDelta.getZ()
             });
 
-        Vectormath::SSE::length(m_basis3d.getCol0());
-
         const float sx = Vectormath::SSE::length(m_basis3d.getCol0());
         const float sy = Vectormath::SSE::length(m_basis3d.getCol1());
         const float sz = Vectormath::SSE::length(m_basis3d.getCol2());
