@@ -323,7 +323,7 @@ NauObjectCreationList::NauObjectCreationList(NauWidget* parent)
 
 }
 
-void NauObjectCreationList::initTypesList(const std::map<std::string, std::string>& types)
+void NauObjectCreationList::initTypesList(const std::vector<std::pair<std::string, std::string>>& types)
 {
     m_actionMap.clear();
     clear();

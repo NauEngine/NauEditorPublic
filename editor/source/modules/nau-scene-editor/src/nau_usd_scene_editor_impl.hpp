@@ -122,7 +122,7 @@ private:
     std::shared_ptr<NauUsdOutlinerClient> m_outlinerClient;
     std::shared_ptr<NauUsdInspectorClient> m_inspectorClient;
 
-    std::map<std::string, std::string> m_outlinerObjectsList;
+    std::vector<std::pair<std::string, std::string>> m_outlinerObjectsList;
     std::vector<std::string> m_inspectorObjectsList;
 
     NauUsdSceneUndoRedoSystemPtr m_sceneUndoRedoSystem;
