@@ -5,6 +5,7 @@
 #include "nau/outliner/nau_world_outline_panel.hpp"
 #include "nau_log.hpp"
 #include "nau_assert.hpp"
+#include "nau/prim-factory/nau_usd_prim_factory.hpp"
 #include "themes/nau_theme.hpp"
 
 #include "nau/utils/nau_usd_editor_utils.hpp"
@@ -21,6 +22,7 @@ NauUsdOutlinerClient::NauUsdOutlinerClient(NauWorldOutlinerWidget* outlinerWidge
     , m_selectionContainer(selectionContainer)
     , m_outlinerTab(outlinerTab)
 {
+    NauUsdOutlinerClient::rebuildCreationList();
 }
 
 void NauUsdOutlinerClient::handleNotice(NauUITranslatorProxyNotice const& notice)
@@ -232,6 +234,55 @@ void NauUsdOutlinerClient::updateItemFromPrimInternal(QTreeWidgetItem* item, pxr
     itemFlags.setFlag(Qt::ItemIsSelectable, true);
 
     item->setFlags(itemFlags);
+}
+
+void NauUsdOutlinerClient::rebuildCreationList() {
+    std::vector<std::pair<std::string, std::string>> creationList;
+    auto const &factory = NauUsdPrimFactory::instance();
+
+    // Basic objects
+    auto basicFilter = [](const std::string &type) {
+        return type == "Xform" || type == "NauAssetMesh" || type == "NauAssetVFX";
+    };
+    auto types = factory.registeredPrimCreatorsWithDisplayNames(basicFilter);
+    for (const auto &[typeName, displayName]: types) {
+        creationList.emplace_back(typeName, displayName);
+    }
+
+    //Audio
+    creationList.emplace_back("", "");
+    auto audioFilter = [](const std::string &type) {
+        return type == "AudioEmitter";
+    };
+    types = factory.registeredPrimCreatorsWithDisplayNames(audioFilter);
+    for (const auto &[typeName, displayName]: types) {
+        creationList.emplace_back(typeName, displayName);
+    }
+
+    //Lightning
+    creationList.emplace_back("", "");
+    auto lightningFilter = [](const std::string &type) {
+        return  type.find("nau::scene::") != std::string::npos &&
+                type.find("Light") != std::string::npos ||
+                type.find("light") != std::string::npos ||
+                type.find("Environment") != std::string::npos;
+    };
+    types = factory.registeredPrimCreatorsWithDisplayNames(lightningFilter);
+    for (const auto &[typeName, displayName]: types) {
+        creationList.emplace_back(typeName, displayName);
+    }
+
+    //Camera
+    creationList.emplace_back("", "");
+    auto cameraFilter = [](const std::string &type) {
+        return type.find("Camera") != std::string::npos;
+    };
+    types = factory.registeredPrimCreatorsWithDisplayNames(cameraFilter);
+    for (const auto &[typeName, displayName]: types) {
+        creationList.emplace_back(typeName, displayName);
+    }
+
+   if (m_outlinerWidget) m_outlinerWidget->getHeaderWidget().creationList()->initTypesList(creationList);
 }
 
 QTreeWidgetItem* NauUsdOutlinerClient::itemFromPath(const std::string& path)

@@ -66,6 +66,7 @@ signals:
 
 private:
     void updateItemFromPrimInternal(QTreeWidgetItem* item, PXR_NS::UsdPrim prim);
+    virtual void rebuildCreationList();
 
 private:
     PXR_NS::UsdStageRefPtr m_currentScene;
