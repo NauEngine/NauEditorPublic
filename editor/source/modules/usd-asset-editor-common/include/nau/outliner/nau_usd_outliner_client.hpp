@@ -27,6 +27,7 @@ public:
 
     NauWorldOutlinerWidget* outlinerWidget();
 
+    void rebuildCreationList() override;
     void handleNotice(NauUITranslatorProxyNotice const& notice) override;
 
     // TODO: Needed here?
@@ -66,7 +67,6 @@ signals:
 
 private:
     void updateItemFromPrimInternal(QTreeWidgetItem* item, PXR_NS::UsdPrim prim);
-    virtual void rebuildCreationList();
 
 private:
     PXR_NS::UsdStageRefPtr m_currentScene;

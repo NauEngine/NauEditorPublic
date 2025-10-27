@@ -317,6 +317,10 @@ void NauUsdSceneEditor::initOutlinerClient()
     // Create client
     m_outlinerClient = std::make_shared<NauUsdOutlinerClient>(outlinerWidget, outlinerWidget->outlinerTab(), m_selectionContainer);
 
+    // Fill creation list
+    m_outlinerClient->rebuildCreationList();
+
+
     // Subscribe usd scene to usd outliner client
     m_outlinerClient->connect(m_outlinerClient.get(), &NauUsdOutlinerClient::eventPrimDeleteRequested, [this]() {
         const NauUsdNormalizedContainer normalizedContainer(m_selectionContainer->selection());

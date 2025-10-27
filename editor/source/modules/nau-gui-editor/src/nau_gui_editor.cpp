@@ -342,6 +342,9 @@ void NauGuiEditor::initOutlinerClient()
     // Create client
     m_outlinerClient = std::make_shared<NauGuiOutlinerClient>(outlinerWidget, *tab, m_selectionContainer);
 
+    // Fill creation list
+    m_outlinerClient->rebuildCreationList();
+
     // Subscribe usd scene to usd outliner client
     m_outlinerClient->connect(m_outlinerClient.get(), &NauGuiOutlinerClient::eventPrimDeleteRequested, [this]() {
         const NauUsdNormalizedContainer normalizedContainer(m_selectionContainer->selection());

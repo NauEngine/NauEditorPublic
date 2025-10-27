@@ -22,7 +22,6 @@ NauUsdOutlinerClient::NauUsdOutlinerClient(NauWorldOutlinerWidget* outlinerWidge
     , m_selectionContainer(selectionContainer)
     , m_outlinerTab(outlinerTab)
 {
-    NauUsdOutlinerClient::rebuildCreationList();
 }
 
 void NauUsdOutlinerClient::handleNotice(NauUITranslatorProxyNotice const& notice)

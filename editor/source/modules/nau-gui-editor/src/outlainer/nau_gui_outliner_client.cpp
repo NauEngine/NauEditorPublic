@@ -12,7 +12,6 @@
 NauGuiOutlinerClient::NauGuiOutlinerClient(NauWorldOutlinerWidget* outlinerWidget, NauWorldOutlineTableWidget& outlinerTab, const NauUsdSelectionContainerPtr& selectionContainer)
     : NauUsdOutlinerClient(outlinerWidget, outlinerTab, selectionContainer)
 {
-    NauGuiOutlinerClient::rebuildCreationList();
 }
 
 void NauGuiOutlinerClient::rebuildCreationList() {
