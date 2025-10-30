@@ -320,7 +320,6 @@ void NauUsdSceneEditor::initOutlinerClient()
     // Fill creation list
     m_outlinerClient->rebuildCreationList();
 
-
     // Subscribe usd scene to usd outliner client
     m_outlinerClient->connect(m_outlinerClient.get(), &NauUsdOutlinerClient::eventPrimDeleteRequested, [this]() {
         const NauUsdNormalizedContainer normalizedContainer(m_selectionContainer->selection());

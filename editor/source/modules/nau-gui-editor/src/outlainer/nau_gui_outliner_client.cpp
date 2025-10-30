@@ -14,12 +14,15 @@ NauGuiOutlinerClient::NauGuiOutlinerClient(NauWorldOutlinerWidget* outlinerWidge
 {
 }
 
-void NauGuiOutlinerClient::rebuildCreationList() {
-    std::vector<std::pair<std::string, std::string>> creationList;
-    auto types = NauUsdPrimFactory::instance().registeredPrimCreatorsWithDisplayNames([](const std::string& value){
-         return value.find("NauGui") != std::string::npos;
+
+//TODO: Remove this logic
+void NauGuiOutlinerClient::rebuildCreationList()
+{
+    std::vector<std::pair<std::string, std::string> > creationList;
+    auto types = NauUsdPrimFactory::instance().registeredPrimCreatorsWithDisplayNames([](const std::string &value) {
+        return value.find("NauGui") != std::string::npos;
     });
-    for (const auto& [typeName, displayName] : types) {
+    for (const auto &[typeName, displayName]: types) {
         creationList.emplace_back(typeName, displayName);
     }
 

@@ -235,8 +235,10 @@ void NauUsdOutlinerClient::updateItemFromPrimInternal(QTreeWidgetItem* item, pxr
     item->setFlags(itemFlags);
 }
 
-void NauUsdOutlinerClient::rebuildCreationList() {
-    std::vector<std::pair<std::string, std::string>> creationList;
+//TODO: Remove this logic
+void NauUsdOutlinerClient::rebuildCreationList()
+{
+    std::vector<std::pair<std::string, std::string> > creationList;
     auto const &factory = NauUsdPrimFactory::instance();
 
     // Basic objects
@@ -261,10 +263,10 @@ void NauUsdOutlinerClient::rebuildCreationList() {
     //Lightning
     creationList.emplace_back("", "");
     auto lightningFilter = [](const std::string &type) {
-        return  type.find("nau::scene::") != std::string::npos &&
-                type.find("Light") != std::string::npos ||
-                type.find("light") != std::string::npos ||
-                type.find("Environment") != std::string::npos;
+        return type.find("nau::scene::") != std::string::npos &&
+               type.find("Light") != std::string::npos ||
+               type.find("light") != std::string::npos ||
+               type.find("Environment") != std::string::npos;
     };
     types = factory.registeredPrimCreatorsWithDisplayNames(lightningFilter);
     for (const auto &[typeName, displayName]: types) {
@@ -281,7 +283,7 @@ void NauUsdOutlinerClient::rebuildCreationList() {
         creationList.emplace_back(typeName, displayName);
     }
 
-   if (m_outlinerWidget) m_outlinerWidget->getHeaderWidget().creationList()->initTypesList(creationList);
+    if (m_outlinerWidget) m_outlinerWidget->getHeaderWidget().creationList()->initTypesList(creationList);
 }
 
 QTreeWidgetItem* NauUsdOutlinerClient::itemFromPath(const std::string& path)
