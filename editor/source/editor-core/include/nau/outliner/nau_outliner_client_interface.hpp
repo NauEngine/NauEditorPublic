@@ -21,6 +21,7 @@ class NAU_EDITOR_API NauOutlinerClientInterface : public QObject
 public:
     virtual ~NauOutlinerClientInterface() = default;
 
+    virtual void rebuildCreationList() = 0;
     virtual void renameItems(QTreeWidgetItem* item, const QString& newName) = 0;
     virtual void deleteItems() = 0;
     virtual void copyItems() = 0;

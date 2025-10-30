@@ -146,7 +146,7 @@ void NauUsdInspectorClient::buildFromPrimInternal(PXR_NS::UsdPrim prim)
         return value.find("NauGui") == std::string::npos;
     });
     
-    std::map<std::string, std::string> resultTypes;
+    std::vector<std::pair<std::string, std::string>> resultTypes;
 
     for (auto existedType : allComponets) {
         auto it = std::find_if(excludeList.begin(), excludeList.end(), [&existedType](const std::string& exc) {
@@ -157,7 +157,7 @@ void NauUsdInspectorClient::buildFromPrimInternal(PXR_NS::UsdPrim prim)
             continue;
         }
 
-        resultTypes[existedType.first] = existedType.second;
+        resultTypes.emplace_back(existedType);
     }
 
     header->creationList()->initTypesList(resultTypes);

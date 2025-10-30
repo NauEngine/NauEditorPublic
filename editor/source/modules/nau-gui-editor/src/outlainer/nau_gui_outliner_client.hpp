@@ -17,4 +17,6 @@ class NAU_GUI_EDITOR_API NauGuiOutlinerClient : public NauUsdOutlinerClient
 
 public:
     NauGuiOutlinerClient(NauWorldOutlinerWidget* outlinerWidget, NauWorldOutlineTableWidget& outlinerTab, const NauUsdSelectionContainerPtr& selectionContainer);
+
+    void rebuildCreationList() override;
 };

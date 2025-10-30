@@ -27,6 +27,7 @@ public:
 
     NauWorldOutlinerWidget* outlinerWidget();
 
+    void rebuildCreationList() override;
     void handleNotice(NauUITranslatorProxyNotice const& notice) override;
 
     // TODO: Needed here?

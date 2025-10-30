@@ -236,16 +236,6 @@ void NauGuiEditor::openEditorPanel()
     auto assetManager = m_mainEditor->assetManager();
     assetManager->addClient({ NauEditorFileType::UI }, this);
 
-    // Init types list
-    auto outlinerWidget = m_outlinerClient->outlinerWidget();
-
-    NauObjectCreationList* creationList = outlinerWidget->getHeaderWidget().creationList();
-
-    // Temporary solution to be able to separate creator lists
-    creationList->initTypesList(NauUsdPrimFactory::instance().registeredPrimCreatorsWithDisplayNames([](const std::string& value){ 
-        return value.find("NauGui") != std::string::npos;
-    }));
-
     // Viewport initialize
     auto viewportManager = Nau::EditorEngine().viewportManager();
     auto viewport = viewportManager->createViewport(editorName().data());
@@ -351,6 +341,9 @@ void NauGuiEditor::initOutlinerClient()
 
     // Create client
     m_outlinerClient = std::make_shared<NauGuiOutlinerClient>(outlinerWidget, *tab, m_selectionContainer);
+
+    // Fill creation list
+    m_outlinerClient->rebuildCreationList();
 
     // Subscribe usd scene to usd outliner client
     m_outlinerClient->connect(m_outlinerClient.get(), &NauGuiOutlinerClient::eventPrimDeleteRequested, [this]() {
