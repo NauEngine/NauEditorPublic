@@ -205,7 +205,7 @@ void NauLoggerDetailsPanel::createUi(NauShortcutHub* shortcutHub)
         menu.addAction(Nau::Theme::current().iconLoggerCopy(), tr("Copy"), copyKey,
             this, &NauLoggerDetailsPanel::handleCopyMessageTextSelectionRequest);
 
-        menu.base()->exec(QCursor::pos());
+        menu.exec(QCursor::pos());
     });
     shortcutHub->addWidgetShortcut(NauShortcutOperation::LoggerCopyTextSelection, *m_labelMessage,
         std::bind(&NauLoggerDetailsPanel::handleCopyMessageTextSelectionRequest, this));

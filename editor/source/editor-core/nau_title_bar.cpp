@@ -82,12 +82,12 @@ NauTitleBarMenuItem::NauTitleBarMenuItem(const QString& name,
     setFont(itemFont);
 
     // Menu
-    connect(menu->base(), &QMenu::aboutToHide, [this] {
+    connect(menu, &QMenu::aboutToHide, [this] {
         m_menuIsShown = false;
         m_showNextMenu = !this->rect().contains(mapFromGlobal(QCursor::pos()));  // Prevent menu from reappearing when the menu is shown and with click menu title to close it
         update();
     });
-    connect(menu->base(), &QMenu::aboutToShow, [this] {
+    connect(menu, &QMenu::aboutToShow, [this] {
         m_menuIsShown = true;
         update();
     });
@@ -149,13 +149,13 @@ NauTitleBarMenu::NauTitleBarMenu(NauShortcutHub* shortcutHub, NauWidget* parent)
     auto layout = new NauLayoutHorizontal(this);
     int menuWidth = 0;
     for (auto& [_, menu] : m_menu->m_menuByItem) {
-        const auto menuTitle = menu->base()->title();
+        const auto menuTitle = menu->title();
         auto menuWidget = new NauTitleBarMenuItem(menuTitle, menu, this);
         layout->addWidget(menuWidget);
         connect(menuWidget, &NauTitleBarMenuItem::eventPressed, [this, menu, menuWidget] {
             QPoint popupPos = menuWidget->pos();
             popupPos.setY(popupPos.y() + height());
-            menu->base()->popup(mapToGlobal(popupPos));
+            menu->popup(mapToGlobal(popupPos));
         });
         menuWidth += menuWidget->width();
     }

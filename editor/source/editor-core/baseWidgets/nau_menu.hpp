@@ -17,7 +17,7 @@ class NauWidget;
 
 // ** NauMenu
 
-class NAU_EDITOR_API NauMenu : public QWidget
+class NAU_EDITOR_API NauMenu : public QMenu
 {
     Q_OBJECT
     template <typename...Args>
@@ -35,8 +35,7 @@ public:
     NauMenu(QWidget* parent = nullptr);
     NauMenu(const QString& title, NauWidget* parent = nullptr);
 
-    auto base() const { return m_menu; }
-
+    using QMenu::addAction;
     NauAction* addAction(const QString& text);
     NauAction* addAction(const NauIcon& icon, const QString& text);
     NauAction* addAction(const QString& text, const QObject* receiver,
@@ -87,14 +86,7 @@ public:
         return result;
     }
 
-    void addAction(QAction* action);
-
-    void addSeparator();
-
-    void clear();
-
 private:
-    QMenu* m_menu;
 
     inline static constexpr int HorizontalMargin = 16;
     inline static constexpr int VerticalMargin = 8;

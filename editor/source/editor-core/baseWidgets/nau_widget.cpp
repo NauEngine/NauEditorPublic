@@ -174,7 +174,7 @@ NauMenuBar::NauMenuBar(NauWidget* parent)
 
 void NauMenuBar::addMenu(NauMenu* menu)
 {
-    m_bar->addMenu(menu->base());
+    m_bar->addMenu(menu);
 }
 
 
@@ -321,7 +321,7 @@ NauBorderlessButton::NauBorderlessButton(NauMenu* menu, NauWidget* parent)
     setStyleSheet("::menu-indicator{ image:(:/UI/icons/maximize-button.svg); subcontrol-origin: padding; subcontrol-position: center right; }");
 
     if (menu) {
-        setMenu(menu->base());
+        setMenu(menu);
     }
 }
 

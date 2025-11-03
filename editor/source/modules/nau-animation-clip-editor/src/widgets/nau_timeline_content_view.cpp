@@ -673,7 +673,7 @@ void NauTimelineContentView::showKeyframeMenu(NauTimelineKeyframe* keyframe)
 {
     const auto parentWidgetPosition = keyframe->mapToGlobal(QPointF(0, 0)).toPoint();
     const auto correctWidgetPosition = Nau::Utils::Widget::fitWidgetIntoScreen(m_keyframeMenu->sizeHint(), parentWidgetPosition);
-    m_keyframeMenu->base()->popup(correctWidgetPosition);
+    m_keyframeMenu->popup(correctWidgetPosition);
     m_keyframeForMenu = keyframe;
 }
 

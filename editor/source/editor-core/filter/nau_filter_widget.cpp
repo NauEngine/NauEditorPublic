@@ -28,9 +28,9 @@ public:
 
     void setMenu(NauMenu& menu)
     {
-        connect(menu.base(), &QMenu::aboutToShow, [this]{ setState(NauWidgetState::Pressed); });
-        connect(menu.base(), &QMenu::aboutToHide, [this]{ m_currentState = NauWidgetState::Active; });
-        NauAbstractButton::setMenu(menu.base());
+        connect(&menu, &QMenu::aboutToShow, [this]{ setState(NauWidgetState::Pressed); });
+        connect(&menu, &QMenu::aboutToHide, [this]{ m_currentState = NauWidgetState::Active; });
+        NauAbstractButton::setMenu(&menu);
     }
 
     struct StateAndCategory
@@ -152,7 +152,7 @@ void NauFilterWidget::addFilterParam(NauFilterWidgetAction* action, bool isCheck
         return;
     }
 
-    m_filterMenu->base()->addAction(action);
+    m_filterMenu->addAction(action);
 
     connect(&action->checkbox(), &QCheckBox::stateChanged, this, [this, action](int state) {
         handleFilterStateChange(action, static_cast<Qt::CheckState>(state));
