@@ -11,49 +11,7 @@
 #include <QClipboard>
 #include <QMimeData>
 #include <QUrl>
-#include <QUuid>
 
-#include <pxr/usd/usd/stage.h>
-#include <pxr/usd/usd/prim.h>
-#include <pxr/usd/usd/attribute.h>
-#include <pxr/usd/sdf/valueTypeName.h>
-#include <pxr/base/tf/token.h>
-
-
-static bool updateUsdMaterialUid(const QString &filePath) {
-    try {
-        auto stage = pxr::UsdStage::Open(filePath.toStdString());
-        if (!stage) {
-            return false;
-        }
-
-        const auto root = stage->GetPseudoRoot();
-        const auto children = root.GetAllChildren();
-        if (children.empty()) {
-            return false;
-        }
-
-        const auto matPrim = children.front();
-        const pxr::TfToken uidToken("uid");
-
-        pxr::UsdAttribute attr = matPrim.GetAttribute(uidToken);
-        if (!attr) {
-            attr = matPrim.CreateAttribute(uidToken, pxr::SdfValueTypeNames->String);
-        }
-
-        const std::string newUid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
-        if (!attr.Set(newUid)) {
-            return false;
-        }
-
-        stage->GetRootLayer()->Save();
-        return true;
-    } catch (const std::exception &) {
-        return false;
-    } catch (...) {
-        return false;
-    }
-}
 
 // ** NauFileOperations
 
@@ -114,19 +72,6 @@ void NauFileOperations::pasteFromClipboard(const QModelIndex& parent)
         } else {
             NED_TRACE("Successfuly {} {} to {}", (cutting ? "moving" : "coping"), srcPath.toUtf8().constData(),
                 dstFileName.toUtf8().constData());
-
-            if (!cutting && !isDir) {
-                const QFileInfo fiDst(dstFileName);
-                if (fiDst.suffix().toLower() == QStringLiteral("nausd")) {
-                    if (updateUsdMaterialUid(dstFileName)) {
-                        NED_TRACE("Updated uid for copied material {}", dstFileName.toUtf8().constData());
-                    } else {
-                        NED_TRACE("No uid update applied for {}", dstFileName.toUtf8().constData());
-                    }
-                } else {
-                    NED_TRACE("Skipped uid update for {} (not .nausd)", dstFileName.toUtf8().constData());
-                }
-            }
         }
     }
 
@@ -137,11 +82,10 @@ void NauFileOperations::duplicate(const QModelIndexList& indexes)
 {
     for (const auto& index : indexes) {
         const QString srcPath = index.data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
-        const bool isDir = QFileInfo{srcPath}.isDir();
         const NauDir dstPath = QFileInfo{srcPath}.absoluteDir();
         const QString dstFileName = generateFileNameIfExists(srcPath);
 
-        const bool result = isDir 
+        const bool result = QFileInfo{srcPath}.isDir() 
             ? copyPathRecursively(srcPath, dstFileName)
             : QFile::copy(srcPath, dstFileName);
 
@@ -149,19 +93,6 @@ void NauFileOperations::duplicate(const QModelIndexList& indexes)
             NED_ERROR("Failed to duplicate {} to {}", srcPath.toUtf8().constData(), dstFileName.toUtf8().constData());
         } else {
             NED_TRACE("Duplicated {} to {}", srcPath.toUtf8().constData(), dstFileName.toUtf8().constData());
-
-            if (!isDir) {
-                const QFileInfo fiDst(dstFileName);
-                if (fiDst.suffix().toLower() == QStringLiteral("nausd")) {
-                    if (updateUsdMaterialUid(dstFileName)) {
-                        NED_TRACE("Updated uid for duplicated file {}", dstFileName.toUtf8().constData());
-                    } else {
-                        NED_WARNING("No uid update applied for {}", dstFileName.toUtf8().constData());
-                    }
-                } else {
-                    NED_TRACE("Skipped uid update for {} (not .nausd)", dstFileName.toUtf8().constData());
-                }
-            }
         }
     }
 }
@@ -242,16 +173,6 @@ bool NauFileOperations::copyPathRecursively(const QString& src, const QString& d
 
         if (!QFile::copy(srcDir.absoluteFilePath(fileEntry), dstAbsFileName)) { 
             return false;
-        }
-
-        const QFileInfo copiedFI(dstAbsFileName);
-        const QString suffix = copiedFI.suffix().toLower();
-        if (suffix == QStringLiteral("nausd")) {
-            if (updateUsdMaterialUid(dstAbsFileName)) {
-                NED_TRACE("Updated uid for copied file {}", dstAbsFileName.toUtf8().constData());
-            } else {
-                NED_TRACE("No uid update applied for copied file {}", dstAbsFileName.toUtf8().constData());
-            }
         }
     }
 
