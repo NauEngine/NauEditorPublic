@@ -8,49 +8,36 @@
 // ** NauMenu
 
 NauMenu::NauMenu(QWidget* parent)
-    : QWidget(parent)
-    , m_menu(new QMenu(parent))
+    : QMenu(parent)
 {
-    m_menu->setStyleSheet("background-color: #343434");
-    m_menu->setContentsMargins(HorizontalMargin, VerticalMargin, HorizontalMargin, 0);
+    this->setStyleSheet("background-color: #343434");
+    this->setContentsMargins(HorizontalMargin, VerticalMargin, HorizontalMargin, 0);
 }
 
 NauMenu::NauMenu(const QString& title, NauWidget* widget)
-    : QWidget(widget)
-    , m_menu(new QMenu(title, widget))
+    : QMenu(title, widget)
 {
-    m_menu->setStyleSheet("background-color: #343434");
-    m_menu->setContentsMargins(HorizontalMargin, VerticalMargin, HorizontalMargin, 0);
+    this->setStyleSheet("background-color: #343434");
+    this->setContentsMargins(HorizontalMargin, VerticalMargin, HorizontalMargin, 0);
 }
 
-void NauMenu::addAction(QAction* action)
+void NauMenu::addAction(QAction *action)
 {
-    m_menu->addAction(action);
-}
-
-void NauMenu::addSeparator()
-{
-    m_menu->addSeparator();
-}
-
-void NauMenu::clear()
-{
-    m_menu->clear();
+    return QMenu::addAction(action);
 }
 
 NauAction* NauMenu::addAction(const QString& text)
 {
-    auto result = new NauAction(text, m_menu);
-    m_menu->addAction(result);
+    auto result = new NauAction(text, this);
+    QMenu::addAction(result);
 
     return result;
 }
 
 NauAction* NauMenu::addAction(const NauIcon& icon, const QString& text)
 {
-    auto result = new NauAction(icon, text, m_menu);
-    m_menu->addAction(result);
-
+    auto result = new NauAction(icon, text, this);
+    QMenu::addAction(result);
     return result;
 }
 
@@ -79,8 +66,8 @@ NauAction* NauMenu::addAction(const QString& text, const NauKeySequence& shortcu
 
 NauAction* NauMenu::addAction(const NauIcon& icon, const QString& text, const NauKeySequence& shortcut)
 {
-    auto result = new NauAction(icon, text, shortcut, m_menu);
-    m_menu->addAction(result);
+    auto result = new NauAction(icon, text, shortcut, this);
+    QMenu::addAction(result);
 
     return result;
 }

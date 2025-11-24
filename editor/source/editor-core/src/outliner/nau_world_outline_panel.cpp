@@ -298,7 +298,7 @@ void NauWorldOutlineTableWidget::customMenuRequested(QPoint pos)
     actionFocus->setEnabled(singleObjectSelected);
 
     // Show the menu
-    menu->base()->popup(viewport()->mapToGlobal(pos));
+    menu->popup(viewport()->mapToGlobal(pos));
 }
 
 bool NauWorldOutlineTableWidget::cutItems()
@@ -575,7 +575,7 @@ NauWorldOutlinerWidgetHeader::NauWorldOutlinerWidgetHeader(NauWidget* parent)
         if (objectCreationList && m_addButton) {
             const auto parentWidgetPosition = m_addButton->mapToGlobal(QPointF(0, 0)).toPoint();
             const auto correctWidgetPosition = Nau::Utils::Widget::fitWidgetIntoScreen(objectCreationList->sizeHint(), parentWidgetPosition);
-            objectCreationList->base()->popup(correctWidgetPosition);
+            objectCreationList->popup(correctWidgetPosition);
         }
     });
 }

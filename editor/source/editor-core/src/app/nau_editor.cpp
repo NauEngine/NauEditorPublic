@@ -302,7 +302,7 @@ void NauEditor::initProjectBrowser()
     
     m_mainWindow->connect(projectBrowser, &NauProjectBrowser::eventAddContentClicked, [this](const QString& path) {
         NauAddContentMenu addContentMenu(path);
-        addContentMenu.base()->popup(QCursor::pos());
+        addContentMenu.popup(QCursor::pos());
     });
 
     m_mainWindow->connect(projectBrowser, &NauProjectBrowser::eventImportClicked, [this](const QString& dir) {

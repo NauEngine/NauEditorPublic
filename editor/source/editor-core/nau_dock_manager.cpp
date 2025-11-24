@@ -64,17 +64,17 @@ NauDockAreaTitleBar::NauDockAreaTitleBar(ads::CDockAreaWidget* parent)
 
     setObjectName("nauDockAreaTitleBar");
     setFont(Nau::Theme::current().fontDocking());
-    m_addTabMenu->base()->setTitle(tr("Add Tab"));
+    m_addTabMenu->setTitle(tr("Add Tab"));
 
     createButtons();
 
-    connect(m_areaMenu->base(), &QMenu::aboutToShow, this, &NauDockAreaTitleBar::updateMenus);
+    connect(m_areaMenu.get(), &QMenu::aboutToShow, this, &NauDockAreaTitleBar::updateMenus);
 }
 
 void NauDockAreaTitleBar::contextMenuEvent(QContextMenuEvent* event)
 {
     event->accept();
-    m_areaMenu->base()->exec(event->globalPos());
+    m_areaMenu->exec(event->globalPos());
 }
 
 void NauDockAreaTitleBar::createButtons()
@@ -84,7 +84,7 @@ void NauDockAreaTitleBar::createButtons()
     menuButton->setObjectName("nauTabsMenuButton");
     menuButton->setAutoRaise(true);
     menuButton->setPopupMode(QToolButton::InstantPopup);
-    menuButton->setMenu(m_areaMenu->base());
+    menuButton->setMenu(m_areaMenu.get());
     menuButton->setIcon(Nau::Theme::current().iconDockAreaMenu());
     menuButton->setFixedSize(24, 24);
 
@@ -140,8 +140,8 @@ void NauDockAreaTitleBar::updateMenus()
             });
         }
 
-        if (!m_addTabMenu->base()->actions().empty()) {
-            m_areaMenu->base()->addMenu(m_addTabMenu->base());
+        if (!m_addTabMenu->actions().empty()) {
+            m_areaMenu->addMenu(m_addTabMenu.get());
         }
     }
 
@@ -311,7 +311,7 @@ void NauDockWidgetTab::contextMenuEvent(QContextMenuEvent* event)
         menu.addAction(tr("Close Other Tabs"), this, &CDockWidgetTab::closeOtherTabsRequested);
     }
 
-    menu.base()->exec(event->globalPos());
+    menu.exec(event->globalPos());
 }
 
 

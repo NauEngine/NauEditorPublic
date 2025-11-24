@@ -307,12 +307,12 @@ NauTimelineTrackListHeader::NauTimelineTrackListHeader(NauWidget* parent)
     setFixedHeight(48);
 
     connect(m_addPropertyButton, &NauAbstractButton::clicked, [this] {
-        if (m_propertyListMenu->base()->children().empty()) {
+        if (m_propertyListMenu->children().empty()) {
             return;
         }
         const auto parentWidgetPosition = m_addPropertyButton->mapToGlobal(QPointF(0, 0)).toPoint();
         const auto correctWidgetPosition = Nau::Utils::Widget::fitWidgetIntoScreen(m_propertyListMenu->sizeHint(), parentWidgetPosition);
-        m_propertyListMenu->base()->popup(correctWidgetPosition);
+        m_propertyListMenu->popup(correctWidgetPosition);
     });
     connect(m_animationSelector, &QComboBox::currentIndexChanged, this, &NauTimelineTrackListHeader::eventClipSwitched);
     connect(addKeyFrameButton, &NauAbstractButton::clicked, this, &NauTimelineTrackListHeader::eventAddKeyframe);
@@ -528,7 +528,7 @@ void NauTimelineTrackList::addTrack(const NauAnimationProperty* property, int pr
     connect(option, &NauAbstractButton::clicked, [list] {
         const QPoint parentWidgetPosition = list->mapToGlobal(QPointF(0, 0)).toPoint();
         const QPoint correctWidgetPosition = Nau::Utils::Widget::fitWidgetIntoScreen(list->sizeHint(), parentWidgetPosition);
-        list->base()->popup(correctWidgetPosition);
+        list->popup(correctWidgetPosition);
     });
 
     connect(handler, &NauTimelineTrackHandler::eventEditingFinished, this, &NauTimelineTrackList::eventPropertyChanged);

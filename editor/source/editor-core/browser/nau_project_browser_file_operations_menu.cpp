@@ -250,8 +250,8 @@ void NauProjectBrowserFileOperationsMenu::enumerateActionsFor(QAbstractItemView*
             .data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
 
         m_addContentMenu = new NauAddContentMenu(currentDir, nullptr);
-        if (!m_addContentMenu->base()->actions().isEmpty()) {
-            auto addAction = menu.base()->addMenu(m_addContentMenu->base());
+        if (!m_addContentMenu->actions().isEmpty()) {
+            auto addAction = menu.addMenu(m_addContentMenu);
             addAction->setIcon(Nau::Theme::current().iconAddAsset());
 
         }

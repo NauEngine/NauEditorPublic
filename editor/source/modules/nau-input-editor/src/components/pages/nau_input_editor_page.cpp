@@ -998,7 +998,7 @@ NauInputEditorBindView::NauInputEditorBindView(const pxr::UsdPrim& bindPrim, Nau
     auto* addButton = lineEdit->addButton();
     auto* menu = new NauMenu;
     setupSignalActions(menu);
-    addButton->setMenu(menu->base());
+    addButton->setMenu(menu);
 
     // Adding a listener to the resizing event
     installEventFilter(parent);
@@ -1026,7 +1026,7 @@ NauInputEditorBindView::NauInputEditorBindView(const pxr::UsdPrim& bindPrim, Nau
             setupModifierActions(menu);
         }
 
-        addButton->setMenu(menu->base());
+        addButton->setMenu(menu);
     });
 
     // Setup tabs

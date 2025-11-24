@@ -99,7 +99,7 @@ void NauProjectBrowserTableView::contextMenuEvent(QContextMenuEvent* event)
 
     m_fileOperationMenu->enumerateActionsFor(this, menu);
 
-    menu.base()->exec(event->globalPos());
+    menu.exec(event->globalPos());
 }
 
 void NauProjectBrowserTableView::focusInEvent(QFocusEvent* event)
