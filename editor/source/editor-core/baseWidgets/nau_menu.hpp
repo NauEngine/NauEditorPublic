@@ -35,7 +35,7 @@ public:
     NauMenu(QWidget* parent = nullptr);
     NauMenu(const QString& title, NauWidget* parent = nullptr);
 
-    using QMenu::addAction;
+    void addAction(QAction* action);
     NauAction* addAction(const QString& text);
     NauAction* addAction(const NauIcon& icon, const QString& text);
     NauAction* addAction(const QString& text, const QObject* receiver,

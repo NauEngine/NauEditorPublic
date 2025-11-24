@@ -21,10 +21,15 @@ NauMenu::NauMenu(const QString& title, NauWidget* widget)
     this->setContentsMargins(HorizontalMargin, VerticalMargin, HorizontalMargin, 0);
 }
 
+void NauMenu::addAction(QAction *action)
+{
+    return QMenu::addAction(action);
+}
+
 NauAction* NauMenu::addAction(const QString& text)
 {
     auto result = new NauAction(text, this);
-    addAction(result);
+    QMenu::addAction(result);
 
     return result;
 }
@@ -32,7 +37,7 @@ NauAction* NauMenu::addAction(const QString& text)
 NauAction* NauMenu::addAction(const NauIcon& icon, const QString& text)
 {
     auto result = new NauAction(icon, text, this);
-    addAction(result);
+    QMenu::addAction(result);
     return result;
 }
 
@@ -62,7 +67,7 @@ NauAction* NauMenu::addAction(const QString& text, const NauKeySequence& shortcu
 NauAction* NauMenu::addAction(const NauIcon& icon, const QString& text, const NauKeySequence& shortcut)
 {
     auto result = new NauAction(icon, text, shortcut, this);
-    addAction(result);
+    QMenu::addAction(result);
 
     return result;
 }
