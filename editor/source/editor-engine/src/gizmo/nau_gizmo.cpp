@@ -94,9 +94,14 @@ NauGizmoAbstract::~NauGizmoAbstract()
     }
 }
 
+bool NauGizmoAbstract::isOnScreen() const
+{
+    return isGizmoOnScreen(m_basis3d);
+}
+
 void NauGizmoAbstract::render()
 {
-    if (!m_isActive || !isGizmoOnScreen(m_basis3d)) {
+    if (!m_isActive || !isOnScreen()) {
         return;
     }
 

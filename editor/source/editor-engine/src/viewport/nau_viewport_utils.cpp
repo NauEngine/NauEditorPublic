@@ -66,6 +66,68 @@ namespace Nau::Utils
                 && sp4.getZ() >= 0.f
                 && sp4.getZ() <= sp4.getW();
     }
+
+    bool isLineSegmentVisible(const nau::math::vec3& worldPoint1, const nau::math::vec3& worldPoint2)
+    {
+        auto& graphics = nau::getServiceProvider().get<nau::ICoreGraphics>();
+        nau::math::mat4 projectionMatrix = graphics.getProjMatrix();
+        
+        nau::math::mat4 camera = Nau::EditorEngine()
+            .cameraManager()->activeCamera()->getWorldTransform().getMatrix();
+
+        nau::math::mat4 viewProjectionMatrix = projectionMatrix * Vectormath::inverse(camera);
+        nau::math::vec4 clip1 = viewProjectionMatrix * nau::math::vec4(worldPoint1, 1);
+        nau::math::vec4 clip2 = viewProjectionMatrix * nau::math::vec4(worldPoint2, 1);
+
+        if (clip1.getW() != 0.f) {
+            clip1 *= 1.f / clip1.getW();
+        }
+        if (clip2.getW() != 0.f) {
+            clip2 *= 1.f / clip2.getW();
+        }
+
+        // both points are behind near plane
+        if (clip1.getZ() < 0 && clip2.getZ() < 0) {
+            return false;
+        }
+        // both points are beyond far plane
+        if (clip1.getZ() > clip1.getW() && clip2.getZ() > clip2.getW()) {
+            return false;
+        }
+
+        nau::IWindowManager& wndManager = nau::getServiceProvider().get<nau::IWindowManager>();
+        auto [screenWidth, screenHeight] = wndManager.getActiveWindow().getSize();
+
+        nau::math::vec2 screen1, screen2;
+
+        screen1.setX(((clip1.getX() + 1.0f) * 0.5f) * screenWidth);
+        screen1.setY(((-clip1.getY() + 1.0f) * 0.5f) * screenHeight);
+        screen2.setX(((clip2.getX() + 1.0f) * 0.5f) * screenWidth);
+        screen2.setY(((-clip2.getY() + 1.0f) * 0.5f) * screenHeight);
+        
+        auto computeOutcode = [&](const nau::math::vec2& p) -> int {
+            int code = 0;
+            if (p.getX() < 0) code |= 1;                 // left
+            else if (p.getX() > screenWidth) code |= 2;  // right
+            if (p.getY() < 0) code |= 4;                 // bottom  
+            else if (p.getY() > screenHeight) code |= 8; // top
+            return code;
+        };
+        
+        int outcode1 = computeOutcode(screen1);
+        int outcode2 = computeOutcode(screen2);
+
+        // either point is in center
+        if (outcode1 == 0 || outcode2 == 0) {
+            return true;
+        }
+        // both points share the same side therefore do not intersect the screen
+        if ((outcode1 & outcode2) != 0) {
+            return false;
+        }
+        
+        return true;
+    }
 }
 
 

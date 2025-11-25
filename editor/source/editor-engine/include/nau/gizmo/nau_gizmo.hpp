@@ -87,6 +87,8 @@ protected:
     virtual void renderInternal(const nau::math::mat4& basis, int selectedAxes) = 0;
     virtual Axes detectHoveredAxes(nau::math::vec2 screenPoint) = 0;
 
+    virtual bool isOnScreen() const;
+
     const NauBasis2D& basis2d() { return m_basis2d; }
 
 private:
