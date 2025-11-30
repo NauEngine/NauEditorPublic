@@ -13,6 +13,13 @@
 #include "nau/assets/asset_manager.h"
 #include "nau/assets/asset_path.h"
 
+#include <pxr/usd/usd/stage.h>
+#include <pxr/usd/usd/prim.h>
+#include <pxr/usd/usd/attribute.h>
+#include <pxr/usd/sdf/valueTypeName.h>
+#include <pxr/base/tf/token.h>
+#include <pxr/usd/ar/defineResolver.h>
+
 
 // ** NauAssetManager
 
@@ -151,6 +158,8 @@ void NauAssetManager::onAssetChanged(const std::string& assetPath)
 
 void NauAssetManager::assetAdded(const std::string& assetPath)
 {
+    ensureUniqueUid(assetPath);
+
     m_assetProcessor->importAsset(m_projectPath, assetPath);
 
     m_assetDb.reloadAssetDB("assets_database/database.db");
@@ -183,4 +192,76 @@ bool NauAssetManager::isAssetMetaFile(const std::string& assetFilePath)
 bool NauAssetManager::isAssetValid(const std::string& assetFilePath)
 {
     return m_assetProcessor->isAssetValid(assetFilePath);
+}
+
+bool NauAssetManager::ensureUniqueUid(const std::string& assetPath)
+{
+    try {
+        auto stage = pxr::UsdStage::Open(assetPath, pxr::UsdStage::LoadNone);
+        if (!stage) {
+            return false;
+        }
+
+        pxr::UsdPrim assetPrim = stage->GetPrimAtPath(pxr::SdfPath("/Root"));
+        if (!assetPrim) {
+            const auto children = stage->GetPseudoRoot().GetAllChildren();
+            if (children.empty()) {
+                return false;
+            }
+            assetPrim = children.front();
+        }
+
+        const pxr::TfToken uidToken("uid");
+        pxr::UsdAttribute uidAttr = assetPrim.GetAttribute(uidToken);
+
+        if (!uidAttr) {
+            return true;
+        }
+
+        std::string currentUid;
+        if (!uidAttr.Get(&currentUid)) {
+            return true;
+        }
+
+        auto &assetDb = nau::getServiceProvider().get<nau::IAssetDB>();
+
+        try {
+            const auto &foundMeta = assetDb.findAssetMetaInfoByUid(*(nau::Uid::parseString(currentUid)));
+
+            eastl::string nausdPathE = assetDb.getNausdPathFromUid(*(nau::Uid::parseString(currentUid)));
+            std::string nausdPath = nausdPathE.c_str();
+
+            auto normalizePath = [](const std::string& p) {
+                std::string result = std::filesystem::absolute(p).string();
+                for (auto& c : result) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+                return result;
+            };
+
+            if (normalizePath(nausdPath) == normalizePath(assetPath)) {
+                return true;
+            }
+
+        } catch (...) {
+            return true;
+        }
+
+        const std::string newUid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        if (!uidAttr.Set(newUid)) {
+            return false;
+        }
+        if (!stage->GetRootLayer()->Save()) {
+            return false;
+        }
+
+        NED_INFO("Replaced duplicate UID in {} with {}", assetPath, newUid);
+
+        return true;
+
+    } catch (const std::exception &e) {
+        NED_ERROR("Exception occured while ensuring unique uid for {}: {}", assetPath, e.what());
+        return false;
+    } catch (...) {
+        NED_ERROR("Unknown exception occured while ensuring unique uid for {}", assetPath);
+        return false;
+    }
 }
