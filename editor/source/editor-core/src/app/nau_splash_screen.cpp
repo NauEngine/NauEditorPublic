@@ -57,7 +57,7 @@ NauEditorSplashScreen::NauEditorSplashScreen(const QString& projectName, int ste
     projectNameLabel->setObjectName("SplashMessageProjectLabel");
     projectNameLabel->setFont(Nau::Theme::current().fontSplashProjectName());
 
-    auto copyRightLabel = new NauLabel(tr("Nau Engine %1 2023-2024\nAll rights reserved").arg(u8"\u00A9"), this);
+    auto copyRightLabel = new NauLabel(tr("Nau Engine %1 2023-2025\nAll rights reserved").arg(u8"\u00A9"), this);
     copyRightLabel->setObjectName("SplashCopyright");
     copyRightLabel->setAlignment(Qt::AlignRight);
     copyRightLabel->setFont(Nau::Theme::current().fontSplashCopyright());

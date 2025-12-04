@@ -174,6 +174,9 @@ QVariant NauLogModel::data(const QModelIndex& index, int role) const
         case LevelRole: {
              return levelIdx;
         }
+        case Qt::ToolTipRole: {
+            return item.message;
+        }
         default:
             break;
     }

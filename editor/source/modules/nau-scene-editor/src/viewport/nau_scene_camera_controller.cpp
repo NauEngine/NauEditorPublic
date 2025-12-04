@@ -347,6 +347,11 @@ void NauSceneCameraController::changeCameraSpeed(float deltaSpeed)
     m_internalController.changeCameraSpeed(deltaSpeed);
 }
 
+void NauSceneCameraController::setCameraSpeed(float speed)
+{
+    m_internalController.setCameraSpeed(speed);
+}
+
 void NauSceneCameraController::focusOn(const nau::math::mat4& matrix, int distanceMeters )
 {
     m_internalController.focusOn(matrix, distanceMeters);

@@ -237,7 +237,7 @@ class NAU_EDITOR_API NauObjectCreationList : public NauMenu
 public:
     explicit NauObjectCreationList(NauWidget* parent = nullptr);
 
-    void initTypesList(const std::map<std::string, std::string>& types);
+    void initTypesList(const std::vector<std::pair<std::string, std::string>> &types);
 
     void updateTypeList(const std::string& typeName, bool state);
 
@@ -249,6 +249,6 @@ private:
     void createObject(const std::string& path);
 
 private:
-    std::map<std::string, std::string> m_typesList;
+    std::vector<std::pair<std::string, std::string>> m_typesList;
     std::unordered_map<std::string, NauAction*> m_actionMap;
 };

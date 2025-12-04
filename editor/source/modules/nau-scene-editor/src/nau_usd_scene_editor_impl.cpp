@@ -105,37 +105,15 @@ void NauUsdSceneEditor::initialize(NauEditorInterface* mainEditor)
 
 void NauUsdSceneEditor::postInitialize()
 {
-    initOutlinerClient();
-    initInspectorClient();
-    initViewportWidget();
-
-    // Init types list
-    auto outlinerWidget = m_outlinerClient->outlinerWidget();
-
-    // Outliner creation
-    NauObjectCreationList* outlinerCreationList = outlinerWidget->getHeaderWidget().creationList();
-
     const auto descriptors = nau::getServiceProvider().findClasses<const nau::scene::Component>();
     for (const auto& descriptor : descriptors) {
         NauUsdPrimFactory::instance().addCreator(descriptor->getClassName().c_str(),
             std::make_shared<NauUsdPrimComponentCreator>(descriptor->getClassName()));
     }
 
-    m_outlinerObjectsList = {
-        {"Xform","Xform"},
-        {"NauAssetMesh", "Mesh"},
-        {"NauAssetVFX", "VFXInstance"},
-        {"AudioEmitter", "AudioEmitter"},
-        {"nau::scene::EnvironmentComponent", "nau::scene::EnvironmentComponent"},
-        {"nau::scene::DirectionalLightComponent", "nau::scene::DirectionalLightComponent"},
-        {"nau::scene::OmnilightComponent", "nau::scene::OmnilightComponent"},
-        {"nau::scene::SpotlightComponent", "nau::scene::SpotlightComponent"},
-        {"nau::scene::CameraComponent", "nau::scene::CameraComponent"}
-    };  
-
-    // Temporary solution to be able to separate creator lists
-    outlinerCreationList->initTypesList(m_outlinerObjectsList);
-
+    initOutlinerClient();
+    initInspectorClient();
+    initViewportWidget();
     initViewportTools();
 }
 
@@ -322,7 +300,7 @@ void NauUsdSceneEditor::selectObject(QMouseEvent* event, float dpi)
         NED_CRITICAL("Selection failed. Object exist in engine scene and unsyncronized with editor scene!");
         m_selectionContainer->clear();
         return;
-    }
+    } else if (primPath.GetAsString() == m_selectionContainer->lastSelectedPath()) return;
 
     if (!isMultiplySelection) {
         const bool notify = false;
@@ -338,6 +316,9 @@ void NauUsdSceneEditor::initOutlinerClient()
 
     // Create client
     m_outlinerClient = std::make_shared<NauUsdOutlinerClient>(outlinerWidget, outlinerWidget->outlinerTab(), m_selectionContainer);
+
+    // Fill creation list
+    m_outlinerClient->rebuildCreationList();
 
     // Subscribe usd scene to usd outliner client
     m_outlinerClient->connect(m_outlinerClient.get(), &NauUsdOutlinerClient::eventPrimDeleteRequested, [this]() {

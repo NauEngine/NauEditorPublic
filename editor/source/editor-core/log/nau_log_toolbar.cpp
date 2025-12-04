@@ -82,7 +82,7 @@ NauLogToolBar::NauLogToolBar(QWidget* parent)
     settingsButton->setObjectName("loggerPanelSettingsButton");
     settingsButton->setIcon(Nau::Theme::current().iconLoggerSettings());
     settingsButton->setText(tr("Settings"));
-    settingsButton->setMenu(m_menu->base());
+    settingsButton->setMenu(m_menu);
     settingsButton->setFixedHeight(NauLogConstants::settingsButtonHeight());
 
     upperLayout->addWidget(m_filterWidget);

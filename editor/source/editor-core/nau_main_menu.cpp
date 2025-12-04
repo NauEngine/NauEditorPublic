@@ -72,7 +72,7 @@ void NauMainMenu::buildSceneSection()
         m_shortcutHub->getAssociatedKeySequence(NauShortcutOperation::SaveScene), this, &NauMainMenu::eventSaveScene);
     m_shortcutHub->addApplicationShortcut(NauShortcutOperation::SaveScene, std::bind(&QAction::trigger, actionSave));
 
-    auto menuRecent = menu->base()->addMenu(tr("Recent Scenes"));
+    auto menuRecent = menu->addMenu(tr("Recent Scenes"));
     connect(menuRecent, &QMenu::aboutToShow, [this, menuRecent] {
         emit eventRecentScenes(menuRecent);
     });
@@ -119,7 +119,7 @@ void NauMainMenu::buildLanguageSection()
     NED_ASSERT(targetMenu);
 
     targetMenu->addSeparator();
-    auto menu = targetMenu->base()->addMenu(tr("Editor Language"));
+    auto menu = targetMenu->addMenu(tr("Editor Language"));
 
     static const std::vector<std::pair<QString, QString>> languages = {
         { QStringLiteral("Русский"), QStringLiteral("ru")},

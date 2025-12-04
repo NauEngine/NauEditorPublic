@@ -124,6 +124,11 @@ QVariant NauProjectBrowserFileSystemModel::data(const QModelIndex& index, int ro
             : Nau::Theme::current().fontProjectBrowserSecondary();
     }
 
+    if (role == Qt::ToolTipRole) {
+        QFileInfo fileInfo(filePath(index));
+        return fileInfo.fileName();
+    }
+
     return QFileSystemModel::data(index, role);
 }
 

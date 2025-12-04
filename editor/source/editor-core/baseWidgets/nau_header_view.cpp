@@ -83,9 +83,9 @@ void NauHeaderView::contextMenuEvent(QContextMenuEvent* event)
     NauMenu menu;
     fillContextMenu(menu);
 
-    if (!menu.base()->isEmpty()) {
+    if (!menu.isEmpty()) {
 
-        menu.base()->exec(event->globalPos());
+        menu.exec(event->globalPos());
         event->accept();
     }
 }

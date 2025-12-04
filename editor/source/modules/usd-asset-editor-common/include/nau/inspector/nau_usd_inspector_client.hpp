@@ -57,6 +57,7 @@ private:
 
     void buildTransformProperty(PXR_NS::UsdPrim prim, PXR_NS::VtArray<PXR_NS::TfToken>& transformTokens);
     void buildProperties(const UsdProxy::UsdProxyPrim& proxyPrim, const std::string& rawTypeName, const PXR_NS::VtArray<PXR_NS::TfToken>& transformTokensToSkip);
+    void stopComponentBuildTimers();
 
     // TODO: Needed for update system
     void tick();
@@ -64,6 +65,7 @@ private:
 private:
     PXR_NS::SdfPath m_currentPrimPath;
     PXR_NS::UsdStageWeakPtr m_currentScene;
+    std::vector<QTimer*> m_componentBuildTimers;
 
     // TODO: Needed for update system
     NauPropertyMap m_propertyMap;

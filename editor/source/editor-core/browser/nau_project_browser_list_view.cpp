@@ -45,7 +45,7 @@ void NauProjectBrowserListView::contextMenuEvent(QContextMenuEvent* event)
 
     m_fileOperationMenu->enumerateActionsFor(this, menu);
 
-    menu.base()->exec(event->globalPos());
+    menu.exec(event->globalPos());
 }
 
 void NauProjectBrowserListView::focusInEvent(QFocusEvent* event)

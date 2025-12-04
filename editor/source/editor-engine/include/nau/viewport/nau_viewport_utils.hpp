@@ -23,6 +23,7 @@ namespace Nau::Utils
 {
     void screenToWorld(const nau::math::vec2& screen, nau::math::vec3& world, nau::math::vec3& worldDirection);
     bool worldToScreen(const nau::math::vec3& world, nau::math::vec2& screen);
+    bool isLineSegmentVisible(const nau::math::vec3& worldPoint1, const nau::math::vec3& worldPoint2);
 }
 
 

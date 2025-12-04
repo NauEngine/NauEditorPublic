@@ -38,6 +38,7 @@ protected:
     virtual nau::math::vec3 calculateDelta(const nau::math::vec2& pivot2d, const nau::math::vec3& ax, const nau::math::vec3& ay, const nau::math::vec3& az) override;
     virtual void renderInternal(const nau::math::mat4& transform, int selectedAxes) override;
     virtual Axes detectHoveredAxes(nau::math::vec2 screenPoint) override;
+    virtual bool isOnScreen() const override;
 
 private:
     std::vector<nau::math::Point3> m_frustumPoints;

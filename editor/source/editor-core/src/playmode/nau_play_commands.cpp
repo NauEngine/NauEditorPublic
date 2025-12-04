@@ -29,12 +29,12 @@ void NauPlayCommands::startPlay()
     // Reimport project
     Nau::Editor().assetManager()->importAsset("");
 
-    // Change engine mode
-    Nau::EditorEngine().startPlay();
-
     // Change scene editor mode
     const bool isPlaymode = true;
     sceneEditor.changeMode(isPlaymode);
+
+    // Change engine mode
+    Nau::EditorEngine().startPlay();
 }
 
 void NauPlayCommands::pausePlay(const bool isPaused)
@@ -57,5 +57,5 @@ void NauPlayCommands::stopPlay()
 
     if (uiEditor) {
         uiEditor->stopPlay();
-    } 
+    }
 }

@@ -87,6 +87,8 @@ protected:
     virtual void renderInternal(const nau::math::mat4& basis, int selectedAxes) = 0;
     virtual Axes detectHoveredAxes(nau::math::vec2 screenPoint) = 0;
 
+    virtual bool isOnScreen() const;
+
     const NauBasis2D& basis2d() { return m_basis2d; }
 
 private:
@@ -154,6 +156,7 @@ class NAU_EDITOR_ENGINE_API NauRotateGizmo : public NauGizmoAbstract
 {
 protected:
     virtual void startUse(nau::math::vec2 screenPoint) override;
+    virtual void stopUse() override;
 
     virtual void update3DBasis(const nau::math::vec3& delta) override;
     virtual nau::math::vec3 calculateDelta(const nau::math::vec2& pivot2d, const nau::math::vec3& ax, const nau::math::vec3& ay, const nau::math::vec3& az) override;

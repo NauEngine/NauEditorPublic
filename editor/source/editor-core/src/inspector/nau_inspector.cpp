@@ -79,7 +79,7 @@ NauInspectorPageHeader::NauInspectorPageHeader(const std::string& title, const s
             if (m_objectCreationList && addButton) {
                 const auto parentWidgetPosition = addButton->mapToGlobal(QPointF(0, 0)).toPoint();
                 const auto correctWidgetPosition = Nau::Utils::Widget::fitWidgetIntoScreen(m_objectCreationList->sizeHint(), parentWidgetPosition);
-                m_objectCreationList->base()->popup(correctWidgetPosition);
+                m_objectCreationList->popup(correctWidgetPosition);
             }
         });
     }
@@ -114,7 +114,7 @@ NauComponentSpoiler::NauComponentSpoiler(const QString& title, const int animati
 {
     createButtons();
     
-    connect(m_areaMenu->base(), &QMenu::aboutToShow, this, &NauComponentSpoiler::updateMenus);
+    connect(m_areaMenu.get(), &QMenu::aboutToShow, this, &NauComponentSpoiler::updateMenus);
 }
 
 void NauComponentSpoiler::createButtons()
@@ -124,7 +124,7 @@ void NauComponentSpoiler::createButtons()
     menuButton->setObjectName("nauInspectorSpoilerMenuButton");
     menuButton->setAutoRaise(true);
     menuButton->setPopupMode(QToolButton::InstantPopup);
-    menuButton->setMenu(m_areaMenu->base());
+    menuButton->setMenu(m_areaMenu.get());
     menuButton->setIcon(Nau::Theme::current().iconDockAreaMenu());
     menuButton->setFixedSize(24, 24);
 

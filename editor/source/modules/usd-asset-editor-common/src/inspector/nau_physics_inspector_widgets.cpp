@@ -51,7 +51,7 @@ NauInspectorPhysicsCollisionButton::NauInspectorPhysicsCollisionButton(NauWidget
     auto openSettingsButton = new NauMiscButton(this);
     openSettingsButton->setIcon(Nau::Theme::current().iconSettings());
     openSettingsButton->setToolTip(tr("Open channels collision settings"));
-    openSettingsButton->setMenu(m_popupMenu->base());
+    openSettingsButton->setMenu(m_popupMenu);
     openSettingsButton->setFixedSize(16, 16);
 
     auto actionWidget = new QWidgetAction(this);
@@ -67,12 +67,12 @@ NauInspectorPhysicsCollisionButton::NauInspectorPhysicsCollisionButton(NauWidget
     m_popupMenu->addAction(actionWidget);
     m_popupMenu->setObjectName("inspectorCollisionSettingButtonMenu");
     m_popupMenu->setContentsMargins(QMargins());
-    m_popupMenu->base()->setContentsMargins(QMargins());
-    m_popupMenu->base()->setStyleSheet("background-color: #343434; padding:0px;");
+    m_popupMenu->setContentsMargins(QMargins());
+    m_popupMenu->setStyleSheet("background-color: #343434; padding:0px;");
 
     m_contentLayout->addWidget(openSettingsButton, 0, 2);
 
-    connect(settingsWidget, &NauPhysicsCollisionSettingsWidget::eventCancelRequested, m_popupMenu->base(), &QMenu::close);
+    connect(settingsWidget, &NauPhysicsCollisionSettingsWidget::eventCancelRequested, m_popupMenu, &QMenu::close);
     connect(settingsWidget, &NauPhysicsCollisionSettingsWidget::eventSaveRequested, [this] {
         if (Nau::getPhysicsCollisionChannelModel().saveChannels()) {
             Nau::getPhysicsCollisionChannelModel().applySettingsToPhysicsWorld();
