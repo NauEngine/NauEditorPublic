@@ -186,19 +186,20 @@ void NauMaterialEditor::handleSourceRemoved(const std::string& assetPath)
 {
     if (m_materialAssetPath == assetPath)
     {
-        if (m_materialAsset)
-        {
+        if (m_materialAsset) {
             onMaterialUnloaded();
         }
 
-        if (m_inspectorWithMaterial)
-        {
+        if (m_inspectorWithMaterial) {
             m_inspectorWithMaterial->clear();
         }
     }
 }
+
+void NauMaterialEditor::resetCameraPosition()
 {
-    // TODO: implement
+  m_cameraControl->setWorldTransform(nau::math::Transform(
+      Vectormath::Quat(30, -30, 0), Vectormath::Vector3(1.f, 2.f, 2.f)));
 }
 
 void NauMaterialEditor::openEditorPanel()
@@ -210,6 +211,7 @@ void NauMaterialEditor::openEditorPanel()
     }
 
     createEditorPanel();
+    createPreviewScene();
     initInspectorClient();
 
     auto viewportManager = Nau::EditorEngine().viewportManager();
@@ -217,6 +219,7 @@ void NauMaterialEditor::openEditorPanel()
     m_viewportContainer->setViewport(viewport);
     viewport->changeViewportController(std::make_shared<NauBaseEditorViewportController>(viewport, nullptr, nullptr, nullptr));
     viewportManager->setViewportRendererWorld(editorName().data(), m_coreWorld->getUid());
+    resetCameraPosition();
 }
 
 void NauMaterialEditor::createEditorPanel()
@@ -283,14 +286,76 @@ void NauMaterialEditor::initInspectorClient()
     });
 }
 
-    m_editorDockManger->addDockWidgetTabToArea(m_dwMaterialPropertyPanel, inspector->dockAreaWidget());
-    m_dwMaterialPropertyPanel->toggleView(true);
+void NauMaterialEditor::createPreviewScene()
+{
+    // TODO: move to other class?
 
-    loadMaterialData(assetPath, *m_inspectorWithMaterial);
+    m_previewStage = pxr::UsdStage::CreateInMemory("Material.usda");
+    auto cubePath = pxr::SdfPath("/PreviewMesh");
+    pxr::GfMatrix4d transform;
+    transform.SetIdentity();
+    auto prim = NauUsdPrimFactory::instance().createPrim(
+        m_previewStage, cubePath, pxr::TfToken("NauAssetMesh"), "NauAssetMesh",
+        transform, false);
+    m_previewStage->SetDefaultPrim(prim);
 
-    NED_DEBUG("Material asset {} opened in new window.", assetPath.toUtf8().constData());
+    auto sceneCreateTask = [this]() -> nau::async::Task<>
+    {
+        auto engineScene = nau::getServiceProvider()
+                               .get<nau::scene::ISceneFactory>()
+                               .createEmptyScene();
+        engineScene->setName("MaterialPreviewScene");
+        m_stageTranslator = std::make_unique<UsdTranslator::StageTranslator>();
+        m_stageTranslator->setSource(m_previewStage);
+        m_stageTranslator->setTarget(*engineScene);
+        co_await m_stageTranslator->initScene();
+        m_stageTranslator->follow();
 
-    return true;
+        // Create camera
+        auto& cameraManager =
+            nau::getServiceProvider().get<nau::scene::ICameraManager>();
+
+        // Create detached camera in preview world
+        m_cameraControl = cameraManager.createDetachedCamera(m_coreWorld->getUid());
+        cameraManager.setMainCamera(m_cameraControl->getCameraUid());
+
+        // Set initial camera params
+        // Will be overwritten
+        m_cameraControl->setClipNearPlane(0.1);
+        m_cameraControl->setClipFarPlane(1000);
+        m_cameraControl->setFov(90);
+        m_cameraControl->setCameraName("Preview.Camera");
+
+        auto enginePreviewScene =
+            co_await m_coreWorld->addScene(std::move(engineScene));
+        m_enginePreviewScene = enginePreviewScene;
+    };
+    auto result = Nau::EditorEngine().runTaskSync(sceneCreateTask().detach());
+}
+
+void NauMaterialEditor::refreshPreviewMeshMaterial()
+{
+    if (m_previewStage)
+    {
+        auto previewMeshPrim = m_previewStage->GetDefaultPrim();
+        auto prop = previewMeshPrim.GetProperty("Material:assign"_tftoken);
+        if (previewMeshPrim)
+        {
+            auto materialAttr =
+                previewMeshPrim.GetAttribute("Material:assign"_tftoken);
+            if (!materialAttr)
+            {
+                materialAttr = previewMeshPrim.CreateAttribute(
+                    "Material:assign"_tftoken, pxr::SdfValueTypeNames->Asset, false);
+            }
+            pxr::SdfAssetPath materialSdfPath(m_materialAssetPath);
+            materialAttr.Set(materialSdfPath);
+            if (m_stageTranslator)
+            {
+                m_stageTranslator->forceUpdate(previewMeshPrim);
+            }
+        }
+    }
 }
 
 void NauMaterialEditor::loadMaterialData(const QString& assetPath, NauInspectorPage& inspector)
@@ -321,6 +386,7 @@ void NauMaterialEditor::loadMaterialData(const QString& assetPath, NauInspectorP
     // TODO: Now we can build only from one NauMaterialPipline
     auto materialPipelinePrim = children.front();
     m_inspectorClient->buildFromMaterial(materialPipelinePrim);
+    refreshPreviewMeshMaterial();
 }
 
 void NauMaterialEditor::onMaterialUnloaded()

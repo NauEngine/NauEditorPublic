@@ -66,6 +66,8 @@ public:
     void openEditorPanel();
     void createEditorPanel();
     void initInspectorClient();
+    void createPreviewScene();
+    void refreshPreviewMeshMaterial();
 
     void loadMaterialData(const QString& assetPath, NauInspectorPage& inspector);
     void onMaterialUnloaded();
@@ -82,6 +84,10 @@ private:
     NauDockManager* m_materialEditorDockManager = nullptr;
 
     nau::scene::IWorld::WeakRef m_coreWorld;
+    nau::scene::IScene::WeakRef m_enginePreviewScene;
+    pxr::UsdStageRefPtr m_previewStage;
+    std::shared_ptr<UsdTranslator::StageTranslator> m_stageTranslator;
+    nau::Ptr<nau::scene::ICameraControl> m_cameraControl;
 
     std::shared_ptr<NauUsdInspectorClient> m_inspectorClient;
     NauUsdSceneUndoRedoSystemPtr m_sceneUndoRedoSystem;
