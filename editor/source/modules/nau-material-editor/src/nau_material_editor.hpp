@@ -13,7 +13,12 @@
 #include "nau/undo-redo/nau_usd_scene_undo_redo.hpp"
 #include "nau/app/nau_editor_interface.hpp"
 #include "nau_dock_manager.hpp"
+#include "nau/scene/world.h"
 #include "pxr/usd/usd/stage.h"
+#include "usd_translator/usd_stage_translator.h"
+#include "nau/scene/camera/camera.h"
+
+#include <memory>
 
 
 class NauMaterialPreview;
@@ -31,6 +36,7 @@ class NauMaterialEditor final : public NauAssetEditorInterface
 
 public:
     NauMaterialEditor();
+    ~NauMaterialEditor();
 
     // TODO: Implement
     void initialize(NauEditorInterface* mainEditor) override;
@@ -48,21 +54,34 @@ public:
 
     // NauAssetManagerClientInterface overrides
     void handleSourceAdded(const std::string& path) override;
-    void handleSourceRemoved(const std::string& path) override;
+    void handleSourceRemoved(const std::string &path) override;
+    void resetCameraPosition();
 
-private:
-    bool openAssetInNewWindow(const QString& assetPath);
+  private:
+    NauMaterialEditor(const NauMaterialEditor&) = default;
+    NauMaterialEditor(NauMaterialEditor&&) = default;
+    NauMaterialEditor& operator=(const NauMaterialEditor&) = default;
+    NauMaterialEditor& operator=(NauMaterialEditor&&) = default;
+
+    void openEditorPanel();
+    void createEditorPanel();
+    void initInspectorClient();
 
     void loadMaterialData(const QString& assetPath, NauInspectorPage& inspector);
+    void onMaterialUnloaded();
 
 private:
     NauEditorInterface* m_mainEditor;
-    NauDockManager* m_editorDockManger;
     NauInspectorPage* m_mainInspector;
-
-    NauMaterialPreview* m_preview = nullptr;
     NauInspectorPage* m_inspectorWithMaterial;
+    NauDockManager* m_editorDockManager;
     NauDockWidget* m_dwMaterialPropertyPanel = nullptr;
+    NauWidget* m_editorPanel = nullptr;
+    NauViewportContainerWidget* m_viewportContainer = nullptr;
+    NauDockWidget* m_dwEditorPanel = nullptr;
+    NauDockManager* m_materialEditorDockManager = nullptr;
+
+    nau::scene::IWorld::WeakRef m_coreWorld;
 
     std::shared_ptr<NauUsdInspectorClient> m_inspectorClient;
     NauUsdSceneUndoRedoSystemPtr m_sceneUndoRedoSystem;

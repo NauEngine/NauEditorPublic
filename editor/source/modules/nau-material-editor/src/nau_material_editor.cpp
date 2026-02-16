@@ -18,6 +18,13 @@
 
 #include "nau/assets/asset_descriptor.h"
 #include "nau/assets/asset_manager.h"
+#include "nau/editor-engine/nau_editor_engine_services.hpp"
+#include "nau/prim-factory/nau_usd_prim_factory.hpp"
+#include "nau/scene/scene_factory.h"
+#include "nau/scene/scene_manager.h"
+#include "nau/scene/camera/camera_manager.h"
+
+#include "pxr/usd/usd/attribute.h"
 
 
 // ** NauMaterialEditor
@@ -27,15 +34,33 @@ NauMaterialEditor::NauMaterialEditor()
 {
 }
 
+NauMaterialEditor::~NauMaterialEditor()
+{
+    terminate();
+}
+
 void NauMaterialEditor::initialize(NauEditorInterface* mainEditor)
 {
     m_mainEditor = mainEditor;
-    m_editorDockManger = mainEditor->mainWindow().dockManager();
+    m_editorDockManager = mainEditor->mainWindow().dockManager();
+
+    m_sceneUndoRedoSystem = std::make_shared<NauUsdSceneUndoRedoSystem>(m_mainEditor->undoRedoSystem());
+
+    auto& sceneManager = nau::getServiceProvider().get<nau::scene::ISceneManager>();
+    m_coreWorld = sceneManager.createWorld();
 }
 
 void NauMaterialEditor::terminate()
 {
-    // TODO: Reset resources
+    if (m_sceneUndoRedoSystem) {
+        m_sceneUndoRedoSystem->unbindCurrentScene();
+    }
+
+    if (m_materialAsset) {
+        m_materialAsset.Reset();
+    }
+
+    //TODO: reset more stuff
 }
 
 void NauMaterialEditor::postInitialize()
@@ -58,13 +83,10 @@ void NauMaterialEditor::createAsset(const std::string& assetPath)
 
 bool NauMaterialEditor::openAsset(const std::string& assetPath)
 {
-    if (m_mainInspector == nullptr) {
-        return openAssetInNewWindow(QString(assetPath.c_str()));
-    }
-
+    openEditorPanel();
     loadMaterialData(QString(assetPath.c_str()), *m_mainInspector);
 
-    NED_DEBUG("Material asset {} opened in the inspector.", assetPath);
+    NED_DEBUG("Material asset {} opened.", assetPath);
     return true;
 }
 
@@ -162,29 +184,104 @@ void NauMaterialEditor::handleSourceAdded(const std::string& path)
 
 void NauMaterialEditor::handleSourceRemoved(const std::string& assetPath)
 {
+    if (m_materialAssetPath == assetPath)
+    {
+        if (m_materialAsset)
+        {
+            onMaterialUnloaded();
+        }
+
+        if (m_inspectorWithMaterial)
+        {
+            m_inspectorWithMaterial->clear();
+        }
+    }
+}
+{
     // TODO: implement
 }
 
-bool NauMaterialEditor::openAssetInNewWindow(const QString& assetPath)
+void NauMaterialEditor::openEditorPanel()
 {
-    const QFileInfo assetFileInfo(assetPath);
-    const QString assetName = assetFileInfo.fileName();
-
-    if (!m_dwMaterialPropertyPanel) {  
-        m_dwMaterialPropertyPanel = new NauDockWidget(QObject::tr(assetName.toUtf8().constData()), nullptr);
-        m_dwMaterialPropertyPanel->setStyleSheet("background-color: #282828");
-        m_dwMaterialPropertyPanel->setObjectName("DockingMaterialProp");
-        m_dwMaterialPropertyPanel->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromContent);
-
-        m_inspectorWithMaterial = new NauInspectorPage(nullptr);
-        m_dwMaterialPropertyPanel->setWidget(m_inspectorWithMaterial);
+    if (m_dwEditorPanel) {
+        m_dwEditorPanel->toggleView(true);
+        resetCameraPosition();
+        return;
     }
 
-    ads::CDockWidget* inspector = m_editorDockManger->inspector();
-    if (inspector == nullptr ) {
-        NED_ERROR("Failed to open Material editor in tab.");
-        return false;
+    createEditorPanel();
+    initInspectorClient();
+
+    auto viewportManager = Nau::EditorEngine().viewportManager();
+    auto viewport = viewportManager->createViewport(editorName().data());
+    m_viewportContainer->setViewport(viewport);
+    viewport->changeViewportController(std::make_shared<NauBaseEditorViewportController>(viewport, nullptr, nullptr, nullptr));
+    viewportManager->setViewportRendererWorld(editorName().data(), m_coreWorld->getUid());
+}
+
+void NauMaterialEditor::createEditorPanel()
+{
+    if (m_editorPanel) {
+        return;
     }
+
+    m_editorPanel = new NauWidget;
+    auto layout = new NauLayoutHorizontal(m_editorPanel);
+    const QSize minSize{1280, 720};
+    m_editorPanel->setMinimumSize(minSize);
+
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    m_editorPanel->setLayout(layout);
+
+    m_inspectorWithMaterial = new NauInspectorPage(m_editorPanel);
+    m_viewportContainer = new NauViewportContainerWidget(m_editorPanel);
+
+    layout->addWidget(m_viewportContainer, Qt::AlignCenter);
+    layout->addWidget(m_inspectorWithMaterial, Qt::AlignRight);
+
+    m_materialEditorDockManager = new NauDockManager(m_editorPanel);
+    layout->addWidget(m_materialEditorDockManager);
+
+    // Viewport
+    auto dwSceneViewPort = new NauDockWidget(QObject::tr("Viewport"), nullptr);
+    dwSceneViewPort->setWidget(m_viewportContainer);
+    dwSceneViewPort->setFeature(ads::CDockWidget::DockWidgetAloneHasNoTitleBar, true);
+    m_materialEditorDockManager->addDockWidget(ads::CenterDockWidgetArea, dwSceneViewPort);
+
+    // Inspector
+    auto dwInspector = new NauDockWidget(QObject::tr("Material Properties"), nullptr);
+    dwInspector->setWidget(m_inspectorWithMaterial);
+    dwInspector->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromContentMinimumSize);
+    m_materialEditorDockManager->addDockWidget(ads::RightDockWidgetArea, dwInspector);
+
+    // Add to global dock manager
+    m_dwEditorPanel = new NauDockWidget(QObject::tr(editorName().c_str()), nullptr);
+    m_dwEditorPanel->setStyleSheet("background-color: #282828");
+    m_dwEditorPanel->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromContent);
+
+    m_dwEditorPanel->setWidget(m_editorPanel);
+    m_editorDockManager->addDockWidgetFloating(m_dwEditorPanel);
+    m_dwEditorPanel->resize(1280, 720);
+    m_dwEditorPanel->toggleView(true);
+}
+
+void NauMaterialEditor::initInspectorClient()
+{
+    m_inspectorClient = std::make_shared<NauUsdInspectorClient>(m_inspectorWithMaterial);
+    m_inspectorClient->connect(m_inspectorClient.get(), &NauUsdInspectorClient::eventPropertyChanged, [this](const PXR_NS::SdfPath& path, const PXR_NS::TfToken propName, const PXR_NS::VtValue& value) {
+        m_sceneUndoRedoSystem->addCommand<NauCommandChangeUsdPrimProperty>(path, propName, value);
+
+        saveAsset(m_materialAssetPath);
+    });
+
+    m_inspectorClient->connect(m_inspectorClient.get(), &NauUsdInspectorClient::eventAssetReferenceChanged, [this](const PXR_NS::SdfPath& path, const PXR_NS::VtValue& value) {
+        m_sceneUndoRedoSystem->addCommand<NauCommandChangeUsdPrimAssetReference>(path, value);
+
+        saveAsset(m_materialAssetPath);
+    });
+}
 
     m_editorDockManger->addDockWidgetTabToArea(m_dwMaterialPropertyPanel, inspector->dockAreaWidget());
     m_dwMaterialPropertyPanel->toggleView(true);
@@ -198,6 +295,9 @@ bool NauMaterialEditor::openAssetInNewWindow(const QString& assetPath)
 
 void NauMaterialEditor::loadMaterialData(const QString& assetPath, NauInspectorPage& inspector)
 {
+    if (m_materialAsset) {
+        onMaterialUnloaded();
+    }
     m_inspectorWithMaterial = &inspector;
     m_materialAssetPath = assetPath.toUtf8().constData();
 
@@ -208,21 +308,8 @@ void NauMaterialEditor::loadMaterialData(const QString& assetPath, NauInspectorP
         return;
     }
 
-    m_sceneUndoRedoSystem = std::make_shared<NauUsdSceneUndoRedoSystem>(m_mainEditor->undoRedoSystem());
     m_sceneUndoRedoSystem->bindCurrentScene(m_materialAsset);
 
-    m_inspectorClient = std::make_shared<NauUsdInspectorClient>(m_inspectorWithMaterial);
-    m_inspectorClient->connect(m_inspectorClient.get(), &NauUsdInspectorClient::eventPropertyChanged, [this](const PXR_NS::SdfPath& path, const PXR_NS::TfToken propName, const PXR_NS::VtValue& value) {
-        m_sceneUndoRedoSystem->addCommand<NauCommandChangeUsdPrimProperty>(path, propName, value);
-
-        saveAsset(m_materialAssetPath);
-    });
-
-    m_inspectorClient->connect(m_inspectorClient.get(), &NauUsdInspectorClient::eventAssetReferenceChanged, [this](const PXR_NS::SdfPath& path, const PXR_NS::VtValue& value) {
-        m_sceneUndoRedoSystem->addCommand<NauCommandChangeUsdPrimAssetReference>(path, value);
-
-        saveAsset(m_materialAssetPath);
-    });
 
     auto rootPrim = m_materialAsset->GetPseudoRoot();
     auto children = rootPrim.GetAllChildren();
@@ -234,4 +321,17 @@ void NauMaterialEditor::loadMaterialData(const QString& assetPath, NauInspectorP
     // TODO: Now we can build only from one NauMaterialPipline
     auto materialPipelinePrim = children.front();
     m_inspectorClient->buildFromMaterial(materialPipelinePrim);
+}
+
+void NauMaterialEditor::onMaterialUnloaded()
+{
+    m_materialAsset.Reset();
+
+    if (m_sceneUndoRedoSystem) {
+        m_sceneUndoRedoSystem->unbindCurrentScene();
+    }
+
+    if (m_inspectorClient) {
+        m_inspectorClient->clear();
+    }
 }
