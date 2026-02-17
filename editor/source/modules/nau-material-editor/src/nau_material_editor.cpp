@@ -75,8 +75,8 @@ void NauMaterialEditor::preTerminate()
 
 void NauMaterialEditor::createAsset(const std::string& assetPath)
 {
-    nau::UsdMetaGenerator::instance().generateAssetTemplate(assetPath, "Material", nau::MetaArgs());
-    if (!std::filesystem::exists(assetPath)) {
+    bool result = nau::UsdMetaGenerator::instance().generateAssetTemplate(assetPath, "Material", nau::MetaArgs());
+    if (!result || !std::filesystem::exists(assetPath)) {
         NED_ERROR("Failed to create material asset.");
     }
 }
@@ -292,7 +292,7 @@ void NauMaterialEditor::createPreviewScene()
 
     m_previewStage = pxr::UsdStage::CreateInMemory("Material.usda");
     auto cubePath = pxr::SdfPath("/PreviewMesh");
-    pxr::GfMatrix4d transform;
+    pxr::GfMatrix4d transform{};
     transform.SetIdentity();
     auto prim = NauUsdPrimFactory::instance().createPrim(
         m_previewStage, cubePath, pxr::TfToken("NauAssetMesh"), "NauAssetMesh",
@@ -349,7 +349,11 @@ void NauMaterialEditor::refreshPreviewMeshMaterial()
                     "Material:assign"_tftoken, pxr::SdfValueTypeNames->Asset, false);
             }
             pxr::SdfAssetPath materialSdfPath(m_materialAssetPath);
-            materialAttr.Set(materialSdfPath);
+            if (!materialAttr.Set(materialSdfPath))
+            {
+                NED_ERROR("Failed to set material path on preview mesh: {}", m_materialAssetPath);
+                return;
+            }
             if (m_stageTranslator)
             {
                 m_stageTranslator->forceUpdate(previewMeshPrim);
