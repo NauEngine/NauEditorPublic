@@ -19,7 +19,10 @@
 #include "nau/assets/asset_descriptor.h"
 #include "nau/assets/asset_manager.h"
 #include "nau/editor-engine/nau_editor_engine_services.hpp"
+#include "nau/io/virtual_file_system.h"
+#include "nau/prim-factory/nau_usd_prim_creator.hpp"
 #include "nau/prim-factory/nau_usd_prim_factory.hpp"
+#include "nau/scene/camera/camera_manager.h"
 #include "nau/scene/scene_factory.h"
 #include "nau/scene/scene_manager.h"
 #include "nau/scene/camera/camera_manager.h"
@@ -291,13 +294,27 @@ void NauMaterialEditor::createPreviewScene()
     // TODO: move to other class?
 
     m_previewStage = pxr::UsdStage::CreateInMemory("Material.usda");
-    auto cubePath = pxr::SdfPath("/PreviewMesh");
+    auto previewSdfPath = pxr::SdfPath("/PreviewMesh");
     pxr::GfMatrix4d transform{};
     transform.SetIdentity();
-    auto prim = NauUsdPrimFactory::instance().createPrim(
-        m_previewStage, cubePath, pxr::TfToken("NauAssetMesh"), "NauAssetMesh",
-        transform, false);
-    m_previewStage->SetDefaultPrim(prim);
+    auto& vfs = nau::getServiceProvider().get<nau::io::IVirtualFileSystem>();
+    auto meshesPath = std::filesystem::path(vfs.resolveToNativePath("/content/meshes"));
+    if (std::filesystem::exists(meshesPath/"sphere.usda.nausd")) {
+        transform.SetTranslate({0,1,0});
+        auto creator = NauResourceUsdPrimCreator((meshesPath/"sphere.usda.nausd").string(), pxr::SdfPath("/Root/Sphere"));
+        auto prim = creator.createPrim(m_previewStage, previewSdfPath, pxr::TfToken("NauAssetMesh"),"PreviewMesh", transform, false);
+        m_previewStage->SetDefaultPrim(prim);
+    }
+    else if (std::filesystem::exists(meshesPath/"cube.usda.nausd")) {
+        auto creator = NauResourceUsdPrimCreator((meshesPath/"sphere.usda.nausd").string(), pxr::SdfPath("/Root/Cube"));
+        auto prim = creator.createPrim(m_previewStage, previewSdfPath, pxr::TfToken("NauAssetMesh"),"PreviewMesh", transform, false);
+        m_previewStage->SetDefaultPrim(prim);
+    }
+    else {
+        NED_ERROR("Sphere mesh not found in project. Defining empty preview mesh");
+        auto prim = m_previewStage->DefinePrim(previewSdfPath);
+        m_previewStage->SetDefaultPrim(prim);
+    }
 
     auto sceneCreateTask = [this]() -> nau::async::Task<>
     {
