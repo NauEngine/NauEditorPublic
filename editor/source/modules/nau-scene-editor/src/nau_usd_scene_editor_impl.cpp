@@ -107,8 +107,16 @@ void NauUsdSceneEditor::postInitialize()
 {
     const auto descriptors = nau::getServiceProvider().findClasses<const nau::scene::Component>();
     for (const auto& descriptor : descriptors) {
+        std::string className = descriptor->getClassName();
+        std::string displayName = className;
+        size_t pos = className.rfind("::");
+        if (pos != className.npos && pos+2 < className.size())
+        {
+            displayName = className.substr(pos+2);
+
+        }
         NauUsdPrimFactory::instance().addCreator(descriptor->getClassName().c_str(),
-            std::make_shared<NauUsdPrimComponentCreator>(descriptor->getClassName()));
+            std::make_shared<NauUsdPrimComponentCreator>(descriptor->getClassName()), displayName);
     }
 
     initOutlinerClient();
