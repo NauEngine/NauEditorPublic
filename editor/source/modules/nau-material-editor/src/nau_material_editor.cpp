@@ -63,7 +63,10 @@ void NauMaterialEditor::terminate()
         m_materialAsset.Reset();
     }
 
-    //TODO: reset more stuff
+    if (m_coreWorld) {
+        auto& sceneManager = nau::getServiceProvider().get<nau::scene::ISceneManager>();
+        sceneManager.destroyWorld(m_coreWorld);
+    }
 }
 
 void NauMaterialEditor::postInitialize()
@@ -352,29 +355,26 @@ void NauMaterialEditor::createPreviewScene()
 
 void NauMaterialEditor::refreshPreviewMeshMaterial()
 {
-    if (m_previewStage)
-    {
-        auto previewMeshPrim = m_previewStage->GetDefaultPrim();
-        auto prop = previewMeshPrim.GetProperty("Material:assign"_tftoken);
-        if (previewMeshPrim)
-        {
-            auto materialAttr =
-                previewMeshPrim.GetAttribute("Material:assign"_tftoken);
-            if (!materialAttr)
-            {
-                materialAttr = previewMeshPrim.CreateAttribute(
-                    "Material:assign"_tftoken, pxr::SdfValueTypeNames->Asset, false);
-            }
-            pxr::SdfAssetPath materialSdfPath(m_materialAssetPath);
-            if (!materialAttr.Set(materialSdfPath))
-            {
-                NED_ERROR("Failed to set material path on preview mesh: {}", m_materialAssetPath);
-                return;
-            }
-            if (m_stageTranslator)
-            {
-                m_stageTranslator->forceUpdate(previewMeshPrim);
-            }
+    if (!m_previewStage) {
+        NED_ERROR("Expected non-null preview stage");
+        return;
+    }
+    auto previewMeshPrim = m_previewStage->GetDefaultPrim();
+    auto prop = previewMeshPrim.GetProperty("Material:assign"_tftoken);
+    if (previewMeshPrim) {
+        auto materialAttr =
+            previewMeshPrim.GetAttribute("Material:assign"_tftoken);
+        if (!materialAttr) {
+            materialAttr = previewMeshPrim.CreateAttribute(
+                "Material:assign"_tftoken, pxr::SdfValueTypeNames->Asset, false);
+        }
+        pxr::SdfAssetPath materialSdfPath(m_materialAssetPath);
+        if (!materialAttr.Set(materialSdfPath)) {
+            NED_ERROR("Failed to set material path on preview mesh: {}", m_materialAssetPath);
+            return;
+        }
+        if (m_stageTranslator) {
+            m_stageTranslator->forceUpdate(previewMeshPrim);
         }
     }
 }
