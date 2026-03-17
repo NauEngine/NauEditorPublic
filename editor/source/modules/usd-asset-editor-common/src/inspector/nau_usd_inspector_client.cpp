@@ -273,7 +273,7 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
             auto propertyWidget = createReferenceWidget(proxyPrim.getPrim().GetPath(), val, "reference", magic_enum::enum_name(m_assetType).data());
 
             if (propertyWidget) {
-                if (!componentSpoiler) componentSpoiler = m_inspector->addComponent("asset");
+                if (!componentSpoiler) componentSpoiler = m_inspector->addComponent("Asset");
                 componentSpoiler->addWidget(propertyWidget);
             }
         }
@@ -329,7 +329,12 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
         auto propertyWidget = createPropertyWidget(proxyPrim.getPrim().GetPath(), val, usdType, valueNamespace, propertyName);
 
         if (propertyWidget) {
-            if (!componentSpoiler) componentSpoiler = m_inspector->addComponent(typeName);
+            if (!componentSpoiler)
+            {
+                auto capitalizedName = typeName;
+                capitalizedName[0]=std::toupper(capitalizedName[0]);
+                componentSpoiler = m_inspector->addComponent(capitalizedName);
+            }
             componentSpoiler->addWidget(propertyWidget);
         }
     }
