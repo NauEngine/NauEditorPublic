@@ -3,7 +3,7 @@
 
 #include "nau_material_editor.hpp"
 
-#include "nau_material_preview.hpp"
+#include "nau_material_editor_utils.hpp"
 #include "nau_log.hpp"
 #include "nau_assert.hpp"
 
@@ -19,9 +19,6 @@
 #include "nau/assets/asset_descriptor.h"
 #include "nau/assets/asset_manager.h"
 #include "nau/editor-engine/nau_editor_engine_services.hpp"
-#include "nau/io/virtual_file_system.h"
-#include "nau/prim-factory/nau_usd_prim_creator.hpp"
-#include "nau/prim-factory/nau_usd_prim_factory.hpp"
 #include "nau/scene/camera/camera_manager.h"
 #include "nau/scene/scene_factory.h"
 #include "nau/scene/scene_manager.h"
@@ -217,7 +214,7 @@ void NauMaterialEditor::openEditorPanel()
     }
 
     createEditorPanel();
-    createPreviewScene();
+    openPreviewScene();
     initInspectorClient();
 
     auto viewportManager = Nau::EditorEngine().viewportManager();
@@ -292,31 +289,16 @@ void NauMaterialEditor::initInspectorClient()
     });
 }
 
-void NauMaterialEditor::createPreviewScene()
+void NauMaterialEditor::openPreviewScene()
 {
-    // TODO: move to other class?
-
-    m_previewStage = pxr::UsdStage::CreateInMemory("Material.usda");
-    auto previewSdfPath = pxr::SdfPath("/PreviewMesh");
-    pxr::GfMatrix4d transform{};
-    transform.SetIdentity();
-    auto& vfs = nau::getServiceProvider().get<nau::io::IVirtualFileSystem>();
-    auto meshesPath = std::filesystem::path(vfs.resolveToNativePath("/content/meshes"));
-    if (std::filesystem::exists(meshesPath/"sphere.usda.nausd")) {
-        transform.SetTranslate({0,1,0});
-        auto creator = NauResourceUsdPrimCreator((meshesPath/"sphere.usda.nausd").string(), pxr::SdfPath("/Root/Sphere"));
-        auto prim = creator.createPrim(m_previewStage, previewSdfPath, pxr::TfToken("NauAssetMesh"),"PreviewMesh", transform, false);
-        m_previewStage->SetDefaultPrim(prim);
+    const std::string templatePath = "project_templates/empty/templates/material_preview_sceneTemplate.usda";
+    if (std::filesystem::exists(templatePath))
+    {
+        m_previewStage = pxr::UsdStage::Open(templatePath);
     }
-    else if (std::filesystem::exists(meshesPath/"cube.usda.nausd")) {
-        auto creator = NauResourceUsdPrimCreator((meshesPath/"sphere.usda.nausd").string(), pxr::SdfPath("/Root/Cube"));
-        auto prim = creator.createPrim(m_previewStage, previewSdfPath, pxr::TfToken("NauAssetMesh"),"PreviewMesh", transform, false);
-        m_previewStage->SetDefaultPrim(prim);
-    }
-    else {
-        NED_ERROR("Sphere mesh not found in project. Defining empty preview mesh");
-        auto prim = m_previewStage->DefinePrim(previewSdfPath);
-        m_previewStage->SetDefaultPrim(prim);
+    if (!m_previewStage || !m_previewStage->GetPseudoRoot().IsValid()) // Can be null if there was an error with opening
+    {
+       m_previewStage = NauMaterialEditorUtils::createMaterialPreviewScene();
     }
 
     auto sceneCreateTask = [this]() -> nau::async::Task<>

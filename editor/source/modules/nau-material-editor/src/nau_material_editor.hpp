@@ -66,7 +66,7 @@ public:
     void openEditorPanel();
     void createEditorPanel();
     void initInspectorClient();
-    void createPreviewScene();
+    void openPreviewScene();
     void refreshPreviewMeshMaterial();
 
     void loadMaterialData(const QString& assetPath, NauInspectorPage& inspector);
