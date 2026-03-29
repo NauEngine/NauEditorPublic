@@ -29,6 +29,19 @@
 #include <unordered_set>
 
 
+// ** Helpers
+namespace
+{
+    std::string GetDisplayNameFromClassName(const std::string& className)
+    {
+        const size_t pos = className.rfind("::");
+        if (pos != std::string::npos && pos + 2 < className.size()) {
+            return className.substr(pos + 2);
+        }
+        return className;
+    }
+} // namespace
+
 // ** NauUsdSceneEditorSnapshot
 
 void NauUsdSceneEditorSnapshot::takeShapshot(NauUsdSceneEditor* sceneEditor)
@@ -107,16 +120,9 @@ void NauUsdSceneEditor::postInitialize()
 {
     const auto descriptors = nau::getServiceProvider().findClasses<const nau::scene::Component>();
     for (const auto& descriptor : descriptors) {
-        std::string className = descriptor->getClassName();
-        std::string displayName = className;
-        size_t pos = className.rfind("::");
-        if (pos != className.npos && pos+2 < className.size())
-        {
-            displayName = className.substr(pos+2);
-
-        }
-        NauUsdPrimFactory::instance().addCreator(descriptor->getClassName().c_str(),
-            std::make_shared<NauUsdPrimComponentCreator>(descriptor->getClassName()), displayName);
+        const std::string className = descriptor->getClassName();
+        NauUsdPrimFactory::instance().addCreator(className.c_str(),
+            std::make_shared<NauUsdPrimComponentCreator>(className), GetDisplayNameFromClassName(className));
     }
 
     initOutlinerClient();

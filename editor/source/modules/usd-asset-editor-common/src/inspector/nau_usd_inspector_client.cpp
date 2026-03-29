@@ -18,6 +18,21 @@
 #include <memory>
 #include "nau/shared/file_system.h"
 
+// ** Helper functions
+namespace
+{
+    // Capitalizes the first character of a string if not-empty
+    std::string GetCapitalizedName(const std::string &str)
+    {
+        if (!str.empty()) {
+            auto capitalized = str;
+            capitalized[0] = std::toupper(capitalized[0]);
+            return capitalized;
+        }
+        return str;
+    }
+}
+
 
 //TODO: Refine the api architecture of client-widget interaction in the future
 // ** NauUsdInspectorClient
@@ -331,8 +346,7 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
         if (propertyWidget) {
             if (!componentSpoiler)
             {
-                auto capitalizedName = typeName;
-                capitalizedName[0]=std::toupper(capitalizedName[0]);
+                const auto capitalizedName = GetCapitalizedName(typeName);
                 componentSpoiler = m_inspector->addComponent(capitalizedName);
             }
             componentSpoiler->addWidget(propertyWidget);
