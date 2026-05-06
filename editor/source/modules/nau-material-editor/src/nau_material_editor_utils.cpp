@@ -26,7 +26,7 @@ pxr::UsdStageRefPtr NauMaterialEditorUtils::createMaterialPreviewScene()
         previewStage->SetDefaultPrim(prim);
     }
     else if (std::filesystem::exists(meshesPath/"cube.usda.nausd")) {
-        auto creator = NauResourceUsdPrimCreator((meshesPath/"sphere.usda.nausd").string(), pxr::SdfPath("/Root/Cube"));
+        auto creator = NauResourceUsdPrimCreator((meshesPath/"cube.usda.nausd").string(), pxr::SdfPath("/Root/Cube"));
         auto prim = creator.createPrim(previewStage, previewSdfPath, pxr::TfToken("NauAssetMesh"),"PreviewMesh", transform, false);
         previewStage->SetDefaultPrim(prim);
     }
