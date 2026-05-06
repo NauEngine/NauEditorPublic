@@ -86,7 +86,7 @@ void NauMaterialEditor::createAsset(const std::string& assetPath)
 bool NauMaterialEditor::openAsset(const std::string& assetPath)
 {
     openEditorPanel();
-    loadMaterialData(QString(assetPath.c_str()), *m_mainInspector);
+    loadMaterialData(QString(assetPath.c_str()), *m_inspectorWithMaterial);
 
     NED_DEBUG("Material asset {} opened.", assetPath);
     return true;
@@ -291,12 +291,13 @@ void NauMaterialEditor::initInspectorClient()
 void NauMaterialEditor::openPreviewScene()
 {
     const std::filesystem::path templatesPath = Nau::Editor().currentProject()->assetTemplatesFolder().toUtf8().constData();
-    if (std::filesystem::exists(templatesPath/"material_preview_sceneTemplate.usda"))
+    if (std::filesystem::exists(templatesPath/"material_preview_sceneTemplate.nausd_scene"))
     {
         m_previewStage = pxr::UsdStage::Open((templatesPath/"material_preview_sceneTemplate.nausd_scene").string());
     }
-    if (!m_previewStage || !m_previewStage->GetPseudoRoot().IsValid()) // Can be null if there was an error with opening
+    if (!m_previewStage || !m_previewStage->GetPseudoRoot().IsValid() || !m_previewStage->GetDefaultPrim())
     {
+        // Can be null if there was an error with opening, or other checks if the template is wrong
        m_previewStage = NauMaterialEditorUtils::createMaterialPreviewScene();
     }
 

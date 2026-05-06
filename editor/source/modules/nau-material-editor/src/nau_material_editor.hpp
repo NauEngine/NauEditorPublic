@@ -74,7 +74,6 @@ public:
 
 private:
     NauEditorInterface* m_mainEditor;
-    NauInspectorPage* m_mainInspector;
     NauInspectorPage* m_inspectorWithMaterial;
     NauDockManager* m_editorDockManager;
     NauDockWidget* m_dwMaterialPropertyPanel = nullptr;
