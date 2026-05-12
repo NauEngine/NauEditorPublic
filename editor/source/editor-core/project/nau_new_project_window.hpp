@@ -23,12 +23,14 @@ public:
 private:
     void update();
     void createProject();
+    void fillTemplates();
 
 signals:
-    void eventRequestProjectCreation(const QString& path, const QString& name);
+    void eventRequestProjectCreation(const QString& path, const QString& name, const QString& templateName);
 
 private:
     NauLineEdit* m_inputName;
     NauLineEdit* m_inputPath;
+    NauComboBox* m_inputTemplateComboBox;
     QPushButton* m_buttonCreate;
 };
