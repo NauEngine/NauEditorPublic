@@ -104,7 +104,9 @@ void NauNewProjectWindow::fillTemplates()
 {
     QDir nauDir = QDir::current();
     nauDir.cd("project_templates");
-    const QStringList templateNames = nauDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+
+    QStringList templateNames = nauDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    templateNames.removeOne("empty_no_code");
 
     m_inputTemplateComboBox->addItems(templateNames);
     m_inputTemplateComboBox->setCurrentIndex(0);
