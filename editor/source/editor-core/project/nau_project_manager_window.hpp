@@ -105,7 +105,7 @@ private slots:
     void handleProjectClicked(const NauProjectInfo& projectInfo);
 
 private:
-    void createAndLoadProject(const QString& path, const QString& name);
+    void createAndLoadProject(const QString& path, const QString& name, const QString& templateName);
     void loadProject(const NauProjectInfo& projectInfo, bool needsAnUpgrade = false);
 
 private:

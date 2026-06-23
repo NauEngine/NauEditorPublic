@@ -19,9 +19,10 @@ NauNewProjectWindow::NauNewProjectWindow(NauDialog* parent)
     , m_inputName(new NauLineEdit(this))
     , m_inputPath(new NauLineEdit(this))
     , m_buttonCreate(new QPushButton(tr("Create"), this))
+    , m_inputTemplateComboBox(new NauComboBox(this))
 {
     setWindowTitle(tr("Create New Project"));
-    setFixedSize(400, 180);
+    setFixedSize(400, 220);
     setStyleSheet(QString("background-color: %1").arg(NauColor(19, 21, 22).hex()));
 
     // Project name
@@ -55,6 +56,12 @@ NauNewProjectWindow::NauNewProjectWindow(NauDialog* parent)
         }
     });
 
+    // Templates
+    fillTemplates();
+    auto labelTemplate = new NauLabel(tr("Template:"));
+    layout->addWidget(labelTemplate);
+    layout->addWidget(m_inputTemplateComboBox);
+
     // Create project
     m_buttonCreate->setEnabled(false);
     layout->addWidget(m_buttonCreate);
@@ -76,17 +83,31 @@ void NauNewProjectWindow::createProject()
     setEnabled(false);
     const auto name = m_inputName->text();
     const auto path = m_inputPath->text();
+    const auto templateName = m_inputTemplateComboBox->currentText();
     NED_ASSERT(!name.isEmpty());
     NED_ASSERT(!path.isEmpty() && NauDir(path).exists());
+    NED_ASSERT(!templateName.isEmpty());
 
     // Check if already exists
-    if (NauProjectPath::exists(path, name)) {
+    if (NauProjectPath::exists(path, name))
+    {
         QMessageBox::warning(this, NauApp::name(), tr("Project %1 at %2 already exists!").arg(name).arg(path), QMessageBox::Ok);
         setEnabled(true);
         return;
     }
 
     // All good - request to create a new project
-    emit eventRequestProjectCreation(path, name);
+    emit eventRequestProjectCreation(path, name, templateName);
     accept();
+}
+void NauNewProjectWindow::fillTemplates()
+{
+    QDir nauDir = QDir::current();
+    nauDir.cd("project_templates");
+
+    QStringList templateNames = nauDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    templateNames.removeOne("empty_no_code");
+
+    m_inputTemplateComboBox->addItems(templateNames);
+    m_inputTemplateComboBox->setCurrentIndex(0);
 }

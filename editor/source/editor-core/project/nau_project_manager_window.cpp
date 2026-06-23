@@ -261,9 +261,9 @@ void NauProjectManagerWindow::handleProjectClicked(const NauProjectInfo& project
     loadProject(projectInfo, needsAnUpgrade);
 }
 
-void NauProjectManagerWindow::createAndLoadProject(const QString& path, const QString& name)
+void NauProjectManagerWindow::createAndLoadProject(const QString& path, const QString& name, const QString& templateName)
 {
-    auto project = NauProject::create(path, name);
+    auto project = NauProject::create(path, name, templateName);
     NauSettings::setRecentProjectDirectory(path);
 
     loadProject({ .path = project->path() });

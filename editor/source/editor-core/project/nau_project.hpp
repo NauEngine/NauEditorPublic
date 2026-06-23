@@ -35,7 +35,7 @@ class NAU_EDITOR_API NauProject : public QObject
     Q_OBJECT
 
 public:
-    static NauProjectPtr create(const QString& location, const QString& name);
+    static NauProjectPtr create(const QString& location, const QString& name, const QString& templateName = "empty");
     static NauProjectPtr load(const NauProjectPath& path);
     static NauProjectInfo info(const NauProjectPath& path);
     
