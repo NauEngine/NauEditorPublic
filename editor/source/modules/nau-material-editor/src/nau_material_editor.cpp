@@ -16,14 +16,13 @@
 // TODO: Temporary. Needed for update materials in all prims with this material
 #include "nau/nau_usd_scene_editor.hpp"
 
+#include "nau/app/nau_editor_services.hpp"
 #include "nau/assets/asset_descriptor.h"
 #include "nau/assets/asset_manager.h"
 #include "nau/editor-engine/nau_editor_engine_services.hpp"
 #include "nau/scene/camera/camera_manager.h"
 #include "nau/scene/scene_factory.h"
 #include "nau/scene/scene_manager.h"
-#include "nau/scene/camera/camera_manager.h"
-
 #include "pxr/usd/usd/attribute.h"
 
 
@@ -87,7 +86,7 @@ void NauMaterialEditor::createAsset(const std::string& assetPath)
 bool NauMaterialEditor::openAsset(const std::string& assetPath)
 {
     openEditorPanel();
-    loadMaterialData(QString(assetPath.c_str()), *m_mainInspector);
+    loadMaterialData(QString(assetPath.c_str()), *m_inspectorWithMaterial);
 
     NED_DEBUG("Material asset {} opened.", assetPath);
     return true;
@@ -291,13 +290,14 @@ void NauMaterialEditor::initInspectorClient()
 
 void NauMaterialEditor::openPreviewScene()
 {
-    const std::string templatePath = "project_templates/empty/templates/material_preview_sceneTemplate.usda";
-    if (std::filesystem::exists(templatePath))
+    const std::filesystem::path templatesPath = Nau::Editor().currentProject()->assetTemplatesFolder().toUtf8().constData();
+    if (std::filesystem::exists(templatesPath/"material_preview_sceneTemplate.nausd_scene"))
     {
-        m_previewStage = pxr::UsdStage::Open(templatePath);
+        m_previewStage = pxr::UsdStage::Open((templatesPath/"material_preview_sceneTemplate.nausd_scene").string());
     }
-    if (!m_previewStage || !m_previewStage->GetPseudoRoot().IsValid()) // Can be null if there was an error with opening
+    if (!m_previewStage || !m_previewStage->GetPseudoRoot().IsValid() || !m_previewStage->GetDefaultPrim())
     {
+        // Can be null if there was an error with opening, or other checks if the template is wrong
        m_previewStage = NauMaterialEditorUtils::createMaterialPreviewScene();
     }
 
@@ -342,22 +342,28 @@ void NauMaterialEditor::refreshPreviewMeshMaterial()
         return;
     }
     auto previewMeshPrim = m_previewStage->GetDefaultPrim();
-    auto prop = previewMeshPrim.GetProperty("Material:assign"_tftoken);
-    if (previewMeshPrim) {
-        auto materialAttr =
-            previewMeshPrim.GetAttribute("Material:assign"_tftoken);
-        if (!materialAttr) {
-            materialAttr = previewMeshPrim.CreateAttribute(
-                "Material:assign"_tftoken, pxr::SdfValueTypeNames->Asset, false);
-        }
-        pxr::SdfAssetPath materialSdfPath(m_materialAssetPath);
-        if (!materialAttr.Set(materialSdfPath)) {
-            NED_ERROR("Failed to set material path on preview mesh: {}", m_materialAssetPath);
-            return;
-        }
-        if (m_stageTranslator) {
-            m_stageTranslator->forceUpdate(previewMeshPrim);
-        }
+    if (!previewMeshPrim)
+    {
+        NED_ERROR("No default prim in material preview scene");
+        return;
+    }
+
+    auto materialAttr =
+        previewMeshPrim.GetAttribute("Material:assign"_tftoken);
+    if (!materialAttr)
+    {
+        materialAttr = previewMeshPrim.CreateAttribute(
+            "Material:assign"_tftoken, pxr::SdfValueTypeNames->Asset, false);
+    }
+    pxr::SdfAssetPath materialSdfPath(m_materialAssetPath);
+    if (!materialAttr.Set(materialSdfPath))
+    {
+        NED_ERROR("Failed to set material path on preview mesh: {}", m_materialAssetPath);
+        return;
+    }
+    if (m_stageTranslator)
+    {
+        m_stageTranslator->forceUpdate(previewMeshPrim);
     }
 }
 
