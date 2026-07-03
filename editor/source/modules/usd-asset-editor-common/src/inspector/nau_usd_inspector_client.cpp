@@ -18,6 +18,21 @@
 #include <memory>
 #include "nau/shared/file_system.h"
 
+// ** Helper functions
+namespace
+{
+    // Capitalizes the first character of a string if not-empty
+    std::string GetCapitalizedName(const std::string &str)
+    {
+        if (!str.empty()) {
+            auto capitalized = str;
+            capitalized[0] = std::toupper(capitalized[0]);
+            return capitalized;
+        }
+        return str;
+    }
+}
+
 
 //TODO: Refine the api architecture of client-widget interaction in the future
 // ** NauUsdInspectorClient
@@ -273,7 +288,7 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
             auto propertyWidget = createReferenceWidget(proxyPrim.getPrim().GetPath(), val, "reference", magic_enum::enum_name(m_assetType).data());
 
             if (propertyWidget) {
-                if (!componentSpoiler) componentSpoiler = m_inspector->addComponent("asset");
+                if (!componentSpoiler) componentSpoiler = m_inspector->addComponent("Asset");
                 componentSpoiler->addWidget(propertyWidget);
             }
         }
@@ -329,7 +344,11 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
         auto propertyWidget = createPropertyWidget(proxyPrim.getPrim().GetPath(), val, usdType, valueNamespace, propertyName);
 
         if (propertyWidget) {
-            if (!componentSpoiler) componentSpoiler = m_inspector->addComponent(typeName);
+            if (!componentSpoiler)
+            {
+                const auto capitalizedName = GetCapitalizedName(typeName);
+                componentSpoiler = m_inspector->addComponent(capitalizedName);
+            }
             componentSpoiler->addWidget(propertyWidget);
         }
     }

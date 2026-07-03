@@ -35,7 +35,7 @@ NauProject::~NauProject()
     NED_DEBUG("Closing project: {}", m_displayName);
 }
 
-NauProjectPtr NauProject::create(const QString& location, const QString& name)
+NauProjectPtr NauProject::create(const QString& location, const QString& name, const QString& templateName)
 {
     const auto path = NauProjectPath::create(location, name);
     NED_DEBUG("Creating new project at {}", static_cast<std::string>(path));
@@ -45,7 +45,7 @@ NauProjectPtr NauProject::create(const QString& location, const QString& name)
     projectParentDir.cdUp();
     args->projectPath = projectParentDir.path().toStdString();
     args->toolsPath = qApp->applicationDirPath().toStdString();
-    args->templateName = "empty";
+    args->templateName = templateName.toStdString();
     args->projectName = name.toStdString();
     args->contentOnly = false;
     args->generateSolutionFile = false;
@@ -62,7 +62,11 @@ NauProjectPtr NauProject::create(const QString& location, const QString& name)
     auto project = NauProjectPtr(new NauProject(path));
     project->setDisplayName(name);
     project->m_version = NauEditorVersion::current();
-    project->m_scenes.createScene("main");  // Initial main scene
+
+    const NauSceneManager::SceneInfo mainSceneInfo{ "main", NauSceneManager::defaultDirectory };
+    if (!project->m_scenes.sceneExists(mainSceneInfo)) {
+        project->m_scenes.createScene("main");  // Initial main scene only if not provided by template
+    }
 
     NauFile projectFile(path);
     projectFile.open(QIODevice::ReadOnly);
