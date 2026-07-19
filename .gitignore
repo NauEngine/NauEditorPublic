@@ -1,8 +1,10 @@
-.vs/
-.idea/
+.vs
+.vscode
+.idea
 x64/
 *.user
 build
+dist
 installer/win64/temp/*
 
 /run_tests.bat

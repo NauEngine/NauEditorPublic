@@ -85,7 +85,7 @@ set_target_properties(NauEditorEngine PROPERTIES AUTOMOC TRUE)
 set_target_properties(NauEditorEngine PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/Debug/NauEditor)
 set_target_properties(NauEditorEngine PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/Release/NauEditor)
 
-target_compile_definitions(ui  PRIVATE UI_ELEMENT_DEBUG)
+#target_compile_definitions(ui  PRIVATE UI_ELEMENT_DEBUG)
 
 if (TARGET NauKernel_Import AND TARGET NauFramework_Import)
   add_dependencies(${TargetName} NauKernel_Import NauFramework_Import)
