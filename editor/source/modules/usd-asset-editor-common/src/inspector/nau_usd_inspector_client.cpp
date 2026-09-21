@@ -229,7 +229,7 @@ void NauUsdInspectorClient::buildFromPrimInternal(PXR_NS::UsdPrim prim)
         NED_DEBUG("Inspector component: usdType='{}' componentTypeName='{}' displayName='{}'",
             componentName, realType, component.GetDisplayName());
 
-        //We are forced to postpon e the construction of the UI so that the component has time to be created,
+        //We are forced to postpone the construction of the UI so that the component has time to be created,
         //as its creation happens in asynchronous mode.
         QTimer* buildTimer = new QTimer(this);
         buildTimer->setSingleShot(true);
