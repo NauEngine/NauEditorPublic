@@ -107,7 +107,7 @@ void NauTimelineWindow::setClipNameList(const NauAnimationNameList& nameList, in
 
 void NauTimelineWindow::setCreationAvailable(bool available)
 {
-   m_contentView->setCreationAvailable(available);
+    m_contentView->setCreationAvailable(available);
 }
 
 void NauTimelineWindow::stopPlayback()

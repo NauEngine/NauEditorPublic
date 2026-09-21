@@ -217,8 +217,7 @@ void NauUsdInspectorClient::buildFromPrimInternal(PXR_NS::UsdPrim prim)
         }
         
         std::string componentName = component.GetDisplayName();
-        if (componentName.empty())
-        {
+        if (componentName.empty()) {
             componentName = component.GetTypeName().GetString();
         }
 
