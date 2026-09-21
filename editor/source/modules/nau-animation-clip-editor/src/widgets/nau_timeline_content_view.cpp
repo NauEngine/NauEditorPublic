@@ -331,12 +331,14 @@ NauTimelineContentView::NauTimelineContentView(NauWidget* parent)
 
         connect(m_createClipButton, &QAbstractButton::pressed, this, &NauTimelineContentView::eventClipCreated);
 
-        auto* text = new NauStaticTextLabel(QObject::tr("Select an object to begin animating"), m_createClipContainer);
+        m_createClipText = new NauStaticTextLabel(
+            QObject::tr("Select a GameObject to begin animating."),
+            m_createClipContainer);
 
         auto* layout = new NauLayoutVertical;
         layout->addItem(new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Expanding));
-        layout->addWidget(text);
-        layout->setAlignment(text, Qt::AlignHCenter);
+        layout->addWidget(m_createClipText);
+        layout->setAlignment(m_createClipText, Qt::AlignHCenter);
         layout->addItem(new QSpacerItem(0, 16, QSizePolicy::Fixed, QSizePolicy::Fixed));
         layout->addWidget(m_createClipButton);
         layout->setAlignment(m_createClipButton, Qt::AlignHCenter);
@@ -457,6 +459,9 @@ void NauTimelineContentView::setCurrentTime(float time) noexcept
 void NauTimelineContentView::setCreationAvailable(bool available)
 {
     m_createClipButton->setEnabled(available);
+    m_createClipText->setText(available
+        ? QObject::tr("Create an animation clip to begin animating this GameObject.")
+        : QObject::tr("Select a GameObject to begin animating."));
 }
 
 void NauTimelineContentView::setKeyframesExpanded(int propertyIndex, bool flag)

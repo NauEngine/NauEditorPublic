@@ -5,10 +5,9 @@
 
 #pragma once
 
-#include "nau/nau_timeline_utils.hpp"
-
+#include "baseWidgets/nau_static_text_label.hpp"
 #include "baseWidgets/nau_widget.hpp"
-
+#include "nau/nau_timeline_utils.hpp"
 
 class NauTimelineKeyframePool;
 class NauPrimaryButton;
@@ -208,6 +207,7 @@ private:
     };
 
     NauPrimaryButton* m_createClipButton;
+    NauStaticTextLabel* m_createClipText;
     NauMenu* m_keyframeMenu;
     QList<QLine> m_drawingLines;
     QList<QString> m_drawingText;
