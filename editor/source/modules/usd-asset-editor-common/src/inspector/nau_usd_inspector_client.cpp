@@ -31,26 +31,6 @@ namespace
         }
         return str;
     }
-
-    std::string ResolveComponentDisplayName(const pxr::UsdPrim& prim, const std::string& typeName)
-    {
-        std::string key = typeName;
-        if (key == "NauComponent") {
-            if (auto attr = prim.GetAttribute(pxr::TfToken("componentTypeName"))) {
-                std::string real;
-                if (attr.Get(&real) && !real.empty()) {
-                    key = real;
-                }
-            }
-        }
-
-        const auto names = NauUsdPrimFactory::instance()
-            .registeredPrimCreatorsWithDisplayNames([](const std::string&) { return true; });
-        if (auto it = names.find(key); it != names.end()) {
-            return it->second;
-        }
-        return key;
-    }
 }
 
 
