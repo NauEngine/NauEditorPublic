@@ -5,12 +5,12 @@
 
 #pragma once
 
+#include "baseWidgets/nau_static_text_label.hpp"
+#include "baseWidgets/nau_widget.hpp"
 #include "nau/nau_timeline_utils.hpp"
 
-#include "baseWidgets/nau_widget.hpp"
-
-
 class NauTimelineKeyframePool;
+class NauPrimaryButton;
 
 
 // ** NauTimelineKeyframe
@@ -136,6 +136,7 @@ public:
     [[nodiscard]]
     float currentTime() const noexcept { return m_currentTime; }
     void setCurrentTime(float time) noexcept;
+    void setCreationAvailable(bool available);
     void setKeyframesExpanded(int propertyIndex, bool flag);
     void resetZoom();
 
@@ -205,6 +206,8 @@ private:
         bool expandedFlag = false;
     };
 
+    NauPrimaryButton* m_createClipButton;
+    NauStaticTextLabel* m_createClipText;
     NauMenu* m_keyframeMenu;
     QList<QLine> m_drawingLines;
     QList<QString> m_drawingText;

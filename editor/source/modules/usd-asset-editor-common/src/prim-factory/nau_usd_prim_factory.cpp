@@ -64,7 +64,15 @@ pxr::UsdPrim NauUsdPrimFactory::createPrim(pxr::UsdStageWeakPtr stage, const pxr
         const std::string& displayName, const pxr::GfMatrix4d& initialTransform, bool isComponent)
 {
     NauUsdPrimCreatorAbstractPtr creator = m_creators[typeName.GetString()];
-    return creator->createPrim(stage, path, typeName, displayName, initialTransform, isComponent);
+
+    std::string authoredName = displayName;
+    if (isComponent) {
+        if (auto it = m_typesDisplayNames.find(typeName.GetString()); it != m_typesDisplayNames.end()) {
+            authoredName = it->second;
+        }
+    }
+
+    return creator->createPrim(stage, path, typeName, authoredName, initialTransform, isComponent);
 }
 
 std::vector<std::string> NauUsdPrimFactory::registeredAllPrimCreators() const

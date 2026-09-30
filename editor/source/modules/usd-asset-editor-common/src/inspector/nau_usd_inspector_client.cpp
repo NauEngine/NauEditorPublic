@@ -196,13 +196,24 @@ void NauUsdInspectorClient::buildFromPrimInternal(PXR_NS::UsdPrim prim)
             continue;
         }
         
-        const std::string componentTypeName = component.GetTypeName().GetString();
+        std::string componentName = component.GetDisplayName();
+        if (componentName.empty()) {
+            componentName = component.GetTypeName().GetString();
+        }
+
+        std::string realType;
+        if (auto attr = component.GetAttribute(pxr::TfToken("componentTypeName"))) {
+            attr.Get(&realType);
+        }
+        NED_DEBUG("Inspector component: usdType='{}' componentTypeName='{}' displayName='{}'",
+            componentName, realType, component.GetDisplayName());
+
         //We are forced to postpone the construction of the UI so that the component has time to be created,
         //as its creation happens in asynchronous mode.
         QTimer* buildTimer = new QTimer(this);
         buildTimer->setSingleShot(true);
-        connect(buildTimer, &QTimer::timeout, [this, component, componentTypeName, transformTokens]() {
-            buildProperties(component, componentTypeName, transformTokens);
+        connect(buildTimer, &QTimer::timeout, [this, component, componentName, transformTokens]() {
+            buildProperties(component, componentName, transformTokens);
         });
         m_componentBuildTimers.push_back(buildTimer);
         buildTimer->start();
@@ -301,6 +312,11 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
             if (visibilityValue.IsHolding<bool>() && !visibilityValue.Get<bool>()) {
                 continue;
             }
+        }
+
+        // Skip hidden properties
+        if (prop.second->getPrim().GetAttribute(prop.second->getName()).IsHidden()) {
+            continue;
         }
 
         // Skip transform properties operations

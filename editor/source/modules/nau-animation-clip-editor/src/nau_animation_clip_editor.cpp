@@ -792,6 +792,7 @@ void NauAnimationClipEditor::setSelectedObject(const pxr::UsdPrim& prim, bool ne
         loadPropertyList();
     }
     m_timelineWindow->setClipProperties(m_propertyListPtr);
+    m_timelineWindow->setCreationAvailable(prim.IsValid());
 
     if (needReset) {
         const NauAnimationNameList nameList = std::move(createNameList());

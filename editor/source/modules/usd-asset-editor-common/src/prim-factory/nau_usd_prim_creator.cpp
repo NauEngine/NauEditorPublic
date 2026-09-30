@@ -50,6 +50,7 @@ pxr::UsdPrim NauUsdPrimComponentCreator::createPrimInternal(pxr::UsdStageWeakPtr
     pxr::UsdPrim newPrim = stage->DefinePrim(pxr::SdfPath(path));
     if (pxr::UsdAttribute attr = newPrim.CreateAttribute(pxr::TfToken("componentTypeName"), pxr::SdfValueTypeNames->String)) {
         attr.Set(m_typeName);
+        attr.SetHidden(true);
     }
     // Warning. SetTypeName MUST be after attribute creation.
     newPrim.SetTypeName(pxr::TfToken("NauComponent"));

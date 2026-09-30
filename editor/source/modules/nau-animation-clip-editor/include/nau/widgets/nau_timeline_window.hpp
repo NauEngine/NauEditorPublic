@@ -30,6 +30,7 @@ public:
     void setCurrentTime(float time);
     void setClipProperties(NauAnimationPropertyListPtr propertyList);
     void setClipNameList(const NauAnimationNameList& nameList, int currentNameIndex);
+    void setCreationAvailable(bool available);
     void stopPlayback();
 
 signals:

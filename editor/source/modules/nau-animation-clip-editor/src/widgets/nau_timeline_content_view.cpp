@@ -308,6 +308,7 @@ NauTimelineContentView::NauTimelineContentView(NauWidget* parent)
     , m_timelineScroller(new NauTimelineScrollBar(this, Qt::Horizontal))
     , m_trackScroller(new NauTimelineScrollBar(this, Qt::Vertical))
     , m_createClipContainer(new NauWidget(this))
+    , m_createClipButton(new NauPrimaryButton(this))
     , m_timer(std::make_unique<QTimer>(this))
     , m_decreaseLevel(96)
     , m_baseStepTime(1.f / 60.f)
@@ -321,24 +322,26 @@ NauTimelineContentView::NauTimelineContentView(NauWidget* parent)
         constexpr QSize BUTTON_SIZE{ 74, 28 };
         constexpr QSize BUTTON_ROUND{ BUTTON_SIZE.height() / 2, BUTTON_SIZE.height() / 2 };
 
-        auto* createClipButton = new NauPrimaryButton(this);
-        createClipButton->setText(QObject::tr("Create"));
-        createClipButton->setContentsMargins(16, 6, 16, 6);
-        createClipButton->setFixedHeight(BUTTON_SIZE.height());
-        createClipButton->setMinimumWidth(BUTTON_SIZE.width());
-        createClipButton->setRound(BUTTON_ROUND);
+        m_createClipButton->setText(QObject::tr("Create"));
+        m_createClipButton->setContentsMargins(16, 6, 16, 6);
+        m_createClipButton->setFixedHeight(BUTTON_SIZE.height());
+        m_createClipButton->setMinimumWidth(BUTTON_SIZE.width());
+        m_createClipButton->setRound(BUTTON_ROUND);
+        m_createClipButton->setEnabled(false);
 
-        connect(createClipButton, &QAbstractButton::pressed, this, &NauTimelineContentView::eventClipCreated);
+        connect(m_createClipButton, &QAbstractButton::pressed, this, &NauTimelineContentView::eventClipCreated);
 
-        auto* text = new NauStaticTextLabel(QObject::tr("To begin animating GameObject, create an animation clip."), m_createClipContainer);
+        m_createClipText = new NauStaticTextLabel(
+            QObject::tr("Select a GameObject to begin animating."),
+            m_createClipContainer);
 
         auto* layout = new NauLayoutVertical;
         layout->addItem(new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Expanding));
-        layout->addWidget(text);
-        layout->setAlignment(text, Qt::AlignHCenter);
+        layout->addWidget(m_createClipText);
+        layout->setAlignment(m_createClipText, Qt::AlignHCenter);
         layout->addItem(new QSpacerItem(0, 16, QSizePolicy::Fixed, QSizePolicy::Fixed));
-        layout->addWidget(createClipButton);
-        layout->setAlignment(createClipButton, Qt::AlignHCenter);
+        layout->addWidget(m_createClipButton);
+        layout->setAlignment(m_createClipButton, Qt::AlignHCenter);
         layout->addItem(new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Expanding));
 
         m_createClipContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -451,6 +454,14 @@ float NauTimelineContentView::timeValue(NauTimelineKeyStepReason reason)
 void NauTimelineContentView::setCurrentTime(float time) noexcept
 {
     setCurrentTimeInternal(time, false);
+}
+
+void NauTimelineContentView::setCreationAvailable(bool available)
+{
+    m_createClipButton->setEnabled(available);
+    m_createClipText->setText(available
+        ? QObject::tr("Create an animation clip to begin animating this GameObject.")
+        : QObject::tr("Select a GameObject to begin animating."));
 }
 
 void NauTimelineContentView::setKeyframesExpanded(int propertyIndex, bool flag)

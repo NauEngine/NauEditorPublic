@@ -105,6 +105,11 @@ void NauTimelineWindow::setClipNameList(const NauAnimationNameList& nameList, in
     m_contentView->resetZoom();
 }
 
+void NauTimelineWindow::setCreationAvailable(bool available)
+{
+    m_contentView->setCreationAvailable(available);
+}
+
 void NauTimelineWindow::stopPlayback()
 {
     m_playback->timelineStopButton().pressed();
