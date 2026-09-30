@@ -360,13 +360,6 @@ bool NauProjectBrowser::setProject(const NauProject& project)
     m_fsProxy->setSourceModel(m_fsModel.get());
     m_fsProxy->setAllowedDirs({"\\content\\", "\\source\\"});
     m_fsProxy->setBlackListResourcesWildcard({"\\content\\shaders"});
-    
-    // To-Do: Temporary workaround. Not all items must be undeletable.
-    QList<NauEditorFileType> undeletableTypes;
-    magic_enum::enum_for_each<NauEditorFileType>([&undeletableTypes] (auto type) {
-        undeletableTypes << type;
-    });
-    m_fsProxy->setUndeletableFileTypes(undeletableTypes);
 
     m_treeProxy = std::make_unique<NauProjectTreeProxyModel>();
     m_treeProxy->setSourceModel(m_fsProxy.get());
