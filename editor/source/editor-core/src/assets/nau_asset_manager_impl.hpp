@@ -56,6 +56,8 @@ private:
     void sourceAdded(const std::string& sourcePath);
     void sourceRemoved(const std::string& sourcePath);
 
+    bool ensureUniqueUid(const std::string& assetPath);
+
 private:
     nau::IAssetDB& m_assetDb;
     NauAssetFileProcessorInterface* m_assetProcessor;
