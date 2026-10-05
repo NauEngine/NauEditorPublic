@@ -70,24 +70,22 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     m_buildDirLabel->setWordWrap(true);
 
     auto chooseDirButton = new NauToolButton();
-
     const auto buildDirectory = getDefaultBuildDirectory();
     chooseDirButton->setText(buildDirectory);
     setBuildDirectory(buildDirectory);
-    connect(chooseDirButton, &NauToolButton::clicked, [this]() {
+    connect(chooseDirButton, &NauToolButton::clicked, [this](){
         const QString selectedDir = QFileDialog::getExistingDirectory(this,
             tr("Select directory for your build"), m_buildDir.absolutePath());
 
         if (!selectedDir.isEmpty() && NauDir().exists(selectedDir)) {
             setBuildDirectory(selectedDir);
         }
-        });
+    });
 
     buildDirChooseLayout->addWidget(m_buildDirLabel);
     buildDirChooseLayout->addWidget(chooseDirButton);
 
     buildDirLayout->addLayout(buildDirChooseLayout);
-
     // Build settings layout
     auto platformAndConfigLayout = new NauLayoutHorizontal();
     platformAndConfigLayout->addLayout(platformLayout);
@@ -153,10 +151,7 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     mainLayout->addLayout(buildDirLayout);
     mainLayout->addLayout(postBuildActionLayout);
     mainLayout->addStretch(1);
-
-    // Progress bar occupies its own full-width row above the buttons
     mainLayout->addWidget(m_buildProgressBar);
-
     mainLayout->addLayout(buildButtonsLayout);
 
     fillSettings();
@@ -230,9 +225,6 @@ void NauBuildStartupDailog::fillSettings()
     m_postBuildAction->setCurrentIndex(m_postBuildAction->findData(+AfterBuildAction::None));
 }
 
-// –аскомментируй, чтобы включить имитацию доп. этапов с возможностью отмены.
-// #define NAU_BUILD_STARTUP_DIALOG_FAKE_STAGES
-
 void NauBuildStartupDailog::runBuild()
 {
     if (m_currentBuildState == BuildState::Building) {
@@ -255,49 +247,6 @@ void NauBuildStartupDailog::runBuild()
     setBuildState(BuildState::Building);
 
     auto* buildThread = QThread::create([this, settings, &project, cancelFlag] {
-#ifdef NAU_BUILD_STARTUP_DIALOG_FAKE_STAGES
-        // "—пим" с проверкой отмены. true Ч дождались, false Ч отменили.
-        auto cancellableWait = [cancelFlag](int ms) {
-            constexpr int slice = 50;
-            int remaining = ms;
-            while (remaining > 0) {
-                if (cancelFlag->load()) {
-                    return false;
-                }
-                const int step = std::min(slice, remaining);
-                QThread::msleep(step);
-                remaining -= step;
-            }
-            return !cancelFlag->load();
-            };
-
-        // ќбщий обработчик отмены, чтобы не дублировать код.
-        auto reportCancelled = [this, cancelFlag] {
-            QPointer<NauBuildStartupDailog> guard(this);
-            QMetaObject::invokeMethod(this, [guard, cancelFlag] {
-                if (!guard) return;
-                guard->m_cancelBuildFlag.reset();
-                guard->setBuildState(BuildState::None);
-                guard->m_buildStatusLabel->setText(tr("Build cancelled"));
-                }, Qt::QueuedConnection);
-            };
-
-        // ѕланируема€ доп. работа до реального билда: еЄ можно успеть отменить.
-        const std::pair<const char*, int> stages[] = {
-            { "Preparing build settings...", 4000 },
-            { "Resolving dependencies...",   6000 },
-            { "Collecting assets...",        5000 },
-        };
-
-        for (const auto& [name, ms] : stages) {
-            if (!cancellableWait(ms)) {
-                NED_BUILD_INFO("Build cancelled during stage: {}", name);
-                reportCancelled();
-                return;
-            }
-        }
-#endif // NAU_BUILD_STARTUP_DIALOG_FAKE_STAGES
-
         NauWinDllCompilerCpp compiler;
         std::vector<std::string> logStrings;
 
