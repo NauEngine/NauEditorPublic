@@ -459,14 +459,9 @@ void NauEditor::openBuildWindow()
     NED_TRACE("Launch project requested");
     NED_ASSERT(m_project);
 
-    NauBuildStartupDailog buildDialog(*m_project, m_mainWindow.get());
-
-    if (buildDialog.exec() != QDialog::Accepted) {
-        NED_TRACE("Launch project rejected");
-        return;
-    }
-
-    m_mainWindow->logger()->switchTab(m_launchLoggerName);
+    auto* buildDialog = new NauBuildStartupDailog(*m_project, m_mainWindow.get());
+    buildDialog->setAttribute(Qt::WA_DeleteOnClose);
+    buildDialog->open();
 }
 
 void NauEditor::showCommandHistory(const NauToolButton& button)

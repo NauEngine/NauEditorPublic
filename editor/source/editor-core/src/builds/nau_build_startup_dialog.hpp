@@ -49,6 +49,7 @@ private:
 
 private:
     std::unique_ptr<NauProcess> m_buildProcess;
+    std::shared_ptr<std::atomic_bool> m_cancelBuildFlag;
     NauDir m_buildDir;
     QString m_buildToolPath;
     BuildState m_currentBuildState;
@@ -65,8 +66,10 @@ private:
     NauComboBox* m_postBuildAction;
 
     NauLabel* m_buildStatusLabel;
+    NauProgressBar* m_buildProgressBar;
+
     NauPrimaryButton* m_buildButton;
-    NauPrimaryButton* m_cancelBuildButton;
+    NauPrimaryButton* m_openBuildButton;
 
     inline static constexpr int OuterMargin = 16;
     inline static constexpr int SeparatorSize = 2;

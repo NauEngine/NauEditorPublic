@@ -26,7 +26,7 @@ public:
     virtual bool compileProjectSource(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) = 0;
     virtual bool checkBuildTool(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) = 0;
     virtual bool checkCmakeInPath(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) = 0;
-    virtual bool buildProject(const NauBuildSettings& buildSettings, const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) = 0;
+    virtual bool buildProject(const NauBuildSettings& buildSettings, const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled = {}) = 0;
 };
 
 
@@ -40,5 +40,5 @@ public:
     bool compileProjectSource(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
     bool checkBuildTool(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
     bool checkCmakeInPath(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
-    bool buildProject(const NauBuildSettings& buildSettings, const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
+    bool buildProject(const NauBuildSettings& buildSettings, const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled = {}) override;
 };

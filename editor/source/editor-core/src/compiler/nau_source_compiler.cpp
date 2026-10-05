@@ -8,6 +8,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QDir>
+#include <QThread>
 
 namespace {
     struct NauSourceCompilerConfig
@@ -37,11 +38,12 @@ namespace {
         config.buildTool = project.buildToolPath();
     }
 
-    static bool runJob(NauSourceCompilerConfig& config, QByteArrayList& log, const QStringList& args)
+    static bool runJob(NauSourceCompilerConfig& config, QByteArrayList& log, const QStringList& args, const std::function<bool()>& isCancelled = {})
     {
         QProcess configureProcess;
         configureProcess.setWorkingDirectory(config.projectRootDir);
         configureProcess.setProcessEnvironment(config.env);
+
         config.logFile.write("Staring ");
         config.logFile.write(config.buildTool.toLocal8Bit());
         for (auto& arg : args) {
@@ -49,33 +51,38 @@ namespace {
             config.logFile.write(arg.toLocal8Bit());
         }
         config.logFile.write("\r\n");
+
         configureProcess.start(config.buildTool, args);
-        bool resStart = configureProcess.waitForStarted();
-        if (!resStart) {
+
+        if (!configureProcess.waitForStarted()) {
             config.logFile.write("Failed to start ");
             config.logFile.write(config.buildTool.toLocal8Bit());
             config.logFile.write("\r\n");
             return false;
         }
-        bool resFinish = configureProcess.waitForFinished(-1);
-        if (!resFinish) {
-            config.logFile.write("Failed to finish ");
-            config.logFile.write(config.buildTool.toLocal8Bit());
-            config.logFile.write("\r\n");
-            return false;
+
+        while (configureProcess.state() == QProcess::Running) {
+            if (isCancelled && isCancelled()) {
+                config.logFile.write("Build cancelled by user\r\n");
+                configureProcess.kill();
+                configureProcess.waitForFinished(-1);
+                break;
+            }
+            configureProcess.waitForFinished(50);
         }
+
         auto out = configureProcess.readAllStandardOutput();
         auto errors = configureProcess.readAllStandardError();
         config.logFile.write(out);
         config.logFile.write(errors);
+
         log.clear();
         log.append(out.split('\n'));
         log.append(errors.split('\n'));
         log.append(QStringLiteral("Build tool finished with %1").arg(configureProcess.exitCode()).toLocal8Bit());
 
-        auto d = configureProcess.exitCode();
-
-        return configureProcess.exitStatus() == QProcess::NormalExit && configureProcess.exitCode() == 0;
+        return configureProcess.exitStatus() == QProcess::NormalExit
+            && configureProcess.exitCode() == 0;
     }
 
     struct FileWrite
@@ -209,7 +216,7 @@ bool NauWinDllCompilerCpp::checkCmakeInPath(const NauProject& project, std::vect
 
 }
 
-bool NauWinDllCompilerCpp::buildProject(const NauSourceCompiler::NauBuildSettings& buildSettings, const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink)
+bool NauWinDllCompilerCpp::buildProject(const NauSourceCompiler::NauBuildSettings& buildSettings, const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled)
 {
     stageSink(tr("Building project scripts"));
 
@@ -222,23 +229,26 @@ bool NauWinDllCompilerCpp::buildProject(const NauSourceCompiler::NauBuildSetting
     QStringList args = {
         "build",
         "--project", config.projectRootDir,
-        "--targetDir",buildSettings.targetDir,
+        "--targetDir", buildSettings.targetDir,
         "--preset", buildSettings.preset,
         "--config=" + buildSettings.configName,
         "--skipSourcesCompilation",
         "--skipAssetsCompilation",
         "--postBuildCopy"
     };
-    if(buildSettings.openAfterBuild) { 
+
+    if (buildSettings.openAfterBuild) {
         args.push_back("--openAfterBuild");
     }
-    if (runJob(config, logStringsRaw, args)) {
+
+    if (runJob(config, logStringsRaw, args, isCancelled)) {
         stageSink(tr("Publishing done successfully"));
         result = true;
     }
     else {
         stageSink(tr("Publishing FAILED"));
     }
+
     parseLog(logStringsRaw, logStrings, { "failed","critical","fatal","error" });
     return result;
 }
