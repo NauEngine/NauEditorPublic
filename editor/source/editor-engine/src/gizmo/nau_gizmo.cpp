@@ -390,6 +390,61 @@ nau::math::vec3 NauTranslateGizmo::calculateDelta(const nau::math::vec2& delta, 
 
 NauGizmoAbstract::Axes NauTranslateGizmo::detectHoveredAxes(nau::math::vec2 screenPoint)
 {
+    const NauBasis2D& screenBasis = basis2d();
+
+    const float planeMin = 0.20f;
+    const float planeMax = 0.45f;
+
+    nau::math::vec2 triangle[3];
+
+    triangle[0] = screenBasis.center
+        + screenBasis.axisX * planeMin
+        + screenBasis.axisY * planeMin;
+
+    triangle[1] = screenBasis.center
+        + screenBasis.axisX * planeMax
+        + screenBasis.axisY * planeMin;
+
+    triangle[2] = screenBasis.center
+        + screenBasis.axisX * planeMin
+        + screenBasis.axisY * planeMax;
+
+    if (isPointInTriangle(screenPoint, triangle)) {
+        return Axes::AxisXY;
+    }
+
+    triangle[0] = screenBasis.center
+        + screenBasis.axisX * planeMin
+        + screenBasis.axisZ * planeMin;
+
+    triangle[1] = screenBasis.center
+        + screenBasis.axisX * planeMax
+        + screenBasis.axisZ * planeMin;
+
+    triangle[2] = screenBasis.center
+        + screenBasis.axisX * planeMin
+        + screenBasis.axisZ * planeMax;
+
+    if (isPointInTriangle(screenPoint, triangle)) {
+        return Axes::AxisXZ;
+    }
+
+    triangle[0] = screenBasis.center
+        + screenBasis.axisY * planeMin
+        + screenBasis.axisZ * planeMin;
+
+    triangle[1] = screenBasis.center
+        + screenBasis.axisY * planeMax
+        + screenBasis.axisZ * planeMin;
+
+    triangle[2] = screenBasis.center
+        + screenBasis.axisY * planeMin
+        + screenBasis.axisZ * planeMax;
+
+    if (isPointInTriangle(screenPoint, triangle)) {
+        return Axes::AxisYZ;
+    }
+
     nau::math::vec2 p1, p2;
     Nau::Utils::worldToScreen(m_basis3d.getCol3().getXYZ(), p1);
 
@@ -438,6 +493,53 @@ void NauTranslateGizmo::renderInternal(const nau::math::mat4& basis, int selecte
         lineColor,
         basis.getCol0().getXYZ(),
         1);
+
+    const float planeMin = 0.20f;
+    const float planeMax = 0.45f;
+
+    const nau::math::vec3 center = basis.getCol3().getXYZ();
+
+    const nau::math::vec3 axisX =
+        Vectormath::SSE::normalize(basis.getCol0().getXYZ()) * m_axesLength3d;
+
+    const nau::math::vec3 axisY =
+        Vectormath::SSE::normalize(basis.getCol1().getXYZ()) * m_axesLength3d;
+
+    const nau::math::vec3 axisZ =
+        Vectormath::SSE::normalize(basis.getCol2().getXYZ()) * m_axesLength3d;
+
+    lineColor = (m_hoveredAxes == AxisXY) ? ColorYellow : ColorLtBlue;
+
+    const nau::math::vec3 xy0 = center + axisX * planeMin + axisY * planeMin;
+    const nau::math::vec3 xy1 = center + axisX * planeMax + axisY * planeMin;
+    const nau::math::vec3 xy2 = center + axisX * planeMin + axisY * planeMax;
+
+    dr.drawLine(nau::math::Point3(xy0), nau::math::Point3(xy1), lineColor, 1);
+    dr.drawLine(nau::math::Point3(xy1), nau::math::Point3(xy1 + axisY * (planeMax - planeMin)), lineColor, 1);
+    dr.drawLine(nau::math::Point3(xy2), nau::math::Point3(xy2 + axisX * (planeMax - planeMin)), lineColor, 1);
+    dr.drawLine(nau::math::Point3(xy0), nau::math::Point3(xy2), lineColor, 1);
+
+    lineColor = (m_hoveredAxes == AxisXZ) ? ColorYellow : ColorLtBlue;
+
+    const nau::math::vec3 xz0 = center + axisX * planeMin + axisZ * planeMin;
+    const nau::math::vec3 xz1 = center + axisX * planeMax + axisZ * planeMin;
+    const nau::math::vec3 xz2 = center + axisX * planeMin + axisZ * planeMax;
+
+    dr.drawLine(nau::math::Point3(xz0), nau::math::Point3(xz1), lineColor, 1);
+    dr.drawLine(nau::math::Point3(xz1), nau::math::Point3(xz1 + axisZ * (planeMax - planeMin)), lineColor, 1);
+    dr.drawLine(nau::math::Point3(xz2), nau::math::Point3(xz2 + axisX * (planeMax - planeMin)), lineColor, 1);
+    dr.drawLine(nau::math::Point3(xz0), nau::math::Point3(xz2), lineColor, 1);
+
+    lineColor = (m_hoveredAxes == AxisYZ) ? ColorYellow : ColorLtBlue;
+
+    const nau::math::vec3 yz0 = center + axisY * planeMin + axisZ * planeMin;
+    const nau::math::vec3 yz1 = center + axisY * planeMax + axisZ * planeMin;
+    const nau::math::vec3 yz2 = center + axisY * planeMin + axisZ * planeMax;
+
+    dr.drawLine(nau::math::Point3(yz0), nau::math::Point3(yz1), lineColor, 1);
+    dr.drawLine(nau::math::Point3(yz1), nau::math::Point3(yz1 + axisZ * (planeMax - planeMin)), lineColor, 1);
+    dr.drawLine(nau::math::Point3(yz2), nau::math::Point3(yz2 + axisY * (planeMax - planeMin)), lineColor, 1);
+    dr.drawLine(nau::math::Point3(yz0), nau::math::Point3(yz2), lineColor, 1);
 }
 
 
