@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 #include "nau_editor_engine.hpp"
+#include "nau/shared/file_system.h"
 
 #include "nau/nau_editor_delegates.hpp"
 #include "nau/editor-engine/nau_editor_engine_services.hpp"
@@ -214,20 +215,20 @@ bool NauEditorEngine::initialize(const std::string& rootDir, const std::string& 
             const QString projectModulesList = projectModules.join(",");
             if (!projectModulesList.isEmpty()) {
 
-                const fs::path userDllDirPath{ userDllDir };
+                const fs::path userDllDirPath = fs::u8path(userDllDir);
                 if (fs::exists(userDllDirPath)) {
                     for (auto& module : projectModules) {
-                        const fs::path dllPath = (userDllDirPath / module.toStdString()).replace_extension(".dll");
+                        const fs::path dllPath = (userDllDirPath / fs::u8path(module.toStdString())).replace_extension(".dll");
                         if (fs::exists(dllPath)) {
-                            NauCheckResult(getModuleManager().loadModule(module.toStdString().c_str(), dllPath.string()));
+                            NauCheckResult(getModuleManager().loadModule(module.toStdString().c_str(), nau::pathToUtf8(dllPath)));
                         }
                         else {
-                            NAU_LOG_WARNING("User dll file not found:({})", dllPath.string());
+                            NAU_LOG_WARNING("User dll file not found:({})", nau::pathToUtf8(dllPath));
                         }
                     }
                 }
                 else {
-                    NAU_LOG_WARNING("User dll's directory does not exists:({})", userDllDirPath.string());
+                    NAU_LOG_WARNING("User dll's directory does not exists:({})", nau::pathToUtf8(userDllDirPath));
                 }
             }
 
@@ -250,7 +251,7 @@ bool NauEditorEngine::initialize(const std::string& rootDir, const std::string& 
     auto args = std::make_unique<nau::ImportAssetsArguments>();
     args->projectPath = rootDir;
 
-    if (std::filesystem::exists(rootDir + "/assets_database/database.db"))
+    if (std::filesystem::exists(std::filesystem::u8path(rootDir) / "assets_database/database.db"))
     {
         nau::getServiceProvider().get<nau::IAssetDB>().addAssetDB("assets_database/database.db");
     }

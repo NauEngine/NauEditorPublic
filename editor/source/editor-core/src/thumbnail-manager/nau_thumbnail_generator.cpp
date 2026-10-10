@@ -18,7 +18,7 @@ std::string_view NauThumbnailGeneratorInterface::thumbnailExtension()
 
 bool NauTextureThumbnailGenerator::generate(const std::filesystem::path& destPath, const std::filesystem::path& source)
 {
-    QImage image(source.string().c_str());
+    QImage image(QString::fromStdWString(source.wstring()));
     // TODO: scale texture or use source as thumbnail and remove generator for textures
-    return image.save(destPath.string().c_str(), NauThumbnailGeneratorInterface::thumbnailExtension().data());
+    return image.save(QString::fromStdWString(destPath.wstring()), NauThumbnailGeneratorInterface::thumbnailExtension().data());
 }

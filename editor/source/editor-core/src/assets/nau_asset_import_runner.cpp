@@ -27,17 +27,17 @@ void NauAssetImportRunner::run(const std::optional<std::filesystem::path>& asset
 
     QStringList args{
         "import",
-        "--project", m_projectDir.string().c_str(),
+        "--project", QString::fromStdWString(m_projectDir.wstring()),
     };
 
     if (assetPath) {
         args.push_back("--file");
-        args.push_back(assetPath.value().string().c_str());
+        args.push_back(QString::fromStdWString(assetPath->wstring()));
     }
 
     // Create asset tool process
     m_importProcess = std::make_unique<NauProcess>();
-    m_importProcess->setProgram(m_assetToolPath.string().c_str());
+    m_importProcess->setProgram(QString::fromStdWString(m_assetToolPath.wstring()));
     m_importProcess->setArguments(args);
     const QString assetToolWorkingDirectory = QFileInfo(m_assetToolPath).dir().absolutePath();
     m_importProcess->setWorkingDirectory(assetToolWorkingDirectory);

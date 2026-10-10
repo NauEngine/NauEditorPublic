@@ -45,7 +45,7 @@ std::pair<bool, std::filesystem::path> NauThumbnailManager::generateThumbnail(co
     const std::string nausdPath = nau::FileSystemExtensions::resolveToNativePathContentFolder(assetMetaInfoBase.nausdPath.c_str());
 
     // If thumbnail exists, return registered path
-    if (auto result = thumbnailForAsset(nausdPath); result.first) {
+    if (auto result = thumbnailForAsset(std::filesystem::u8path(nausdPath)); result.first) {
         result;
     }
 
@@ -58,17 +58,17 @@ std::pair<bool, std::filesystem::path> NauThumbnailManager::generateThumbnail(co
     auto& assetDb = nau::getServiceProvider().get<nau::IAssetDB>();
 
     // TODO <Thumbnail>: Rewrite through access to assetDb
-    const std::string nausdRelativePath = nau::FileSystemExtensions::getRelativeAssetPath(nausdPath, false).string();
+    const std::string nausdRelativePath = nau::pathToUtf8(nau::FileSystemExtensions::getRelativeAssetPath(std::filesystem::u8path(nausdPath), false));
     auto sourceRelativePath = assetDb.getSourcePathFromNausdPath(nausdRelativePath.c_str());
     const std::string sourcePath = nau::FileSystemExtensions::resolveToNativePathContentFolder((sourceRelativePath + "." + assetMetaInfoBase.sourceType).c_str());
-    const std::filesystem::path destPath = buildThumbnailPath(sourcePath);
+    const std::filesystem::path destPath = buildThumbnailPath(std::filesystem::u8path(sourcePath));
 
     // Try generate thumbnail and return result
-    if (m_generators[assetType]->generate(destPath, sourcePath)) {
-        m_thumbnailMap[nausdPath] = destPath;
+    if (m_generators[assetType]->generate(destPath, std::filesystem::u8path(sourcePath))) {
+        m_thumbnailMap[std::filesystem::u8path(nausdPath)] = destPath;
     }
 
-    return thumbnailForAsset(nausdPath);
+    return thumbnailForAsset(std::filesystem::u8path(nausdPath));
 }
 
 void NauThumbnailManager::registerGenerators()
@@ -95,10 +95,10 @@ void NauThumbnailManager::generateThumbnailsForTypedAssets(NauEditorFileType typ
     for (const auto& asset : assets) {
         // TODO <Thumbnail>: Rewrite through access to assetDb
         const std::string sourcePath = nau::FileSystemExtensions::resolveToNativePathContentFolder((asset.sourcePath + "." + asset.sourceType).c_str());
-        const std::filesystem::path thumbnailPath = buildThumbnailPath(sourcePath);
+        const std::filesystem::path thumbnailPath = buildThumbnailPath(std::filesystem::u8path(sourcePath));
 
         if (std::filesystem::exists(thumbnailPath)) {
-            m_thumbnailMap[sourcePath] = thumbnailPath;
+            m_thumbnailMap[std::filesystem::u8path(sourcePath)] = thumbnailPath;
             continue;
         }
 
@@ -108,7 +108,7 @@ void NauThumbnailManager::generateThumbnailsForTypedAssets(NauEditorFileType typ
 
 std::filesystem::path NauThumbnailManager::buildThumbnailPath(const std::filesystem::path& assetPath)
 {
-    return m_thumbnailsFolder / (std::format("{}.{}", assetPath.filename().string(), NauThumbnailGeneratorInterface::thumbnailExtension().data()));
+    return m_thumbnailsFolder / std::filesystem::u8path(std::format("{}.{}", nau::pathToUtf8(assetPath.filename()), NauThumbnailGeneratorInterface::thumbnailExtension().data()));
 }
 
 std::pair<bool, std::filesystem::path> NauThumbnailManager::makeGeneratorResult(const std::filesystem::path& path)
