@@ -32,6 +32,7 @@ public:
 
 private:
     std::vector<nau::scene::SceneObject::WeakRef> m_objectList;
+    std::vector<nau::Uid> m_cameraMeshUids;
     std::shared_ptr<NauUsdSceneSynchronizer> m_sceneEditorSynchronizer;
     nau::math::Color4 m_color;
     float m_width;
