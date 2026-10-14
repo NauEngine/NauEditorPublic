@@ -5,6 +5,8 @@
 #include "nau_assert.hpp"
 #include "nau_log.hpp"
 
+#include <algorithm>
+#include <format>
 #include <unordered_set>
 #include "nau/service/service_provider.h"
 #include "nau/shared/file_system.h"
@@ -17,7 +19,10 @@
 #include <pxr/usd/usd/prim.h>
 #include <pxr/usd/usd/attribute.h>
 #include <pxr/usd/sdf/valueTypeName.h>
+#include <pxr/usd/sdf/layer.h>
+#include <pxr/usd/sdf/primSpec.h>
 #include <pxr/base/tf/token.h>
+#include <pxr/base/tf/stringUtils.h>
 #include <pxr/usd/ar/defineResolver.h>
 
 
@@ -223,32 +228,51 @@ bool NauAssetManager::ensureUniqueUid(const std::string& assetPath)
             return true;
         }
 
-        auto &assetDb = nau::getServiceProvider().get<nau::IAssetDB>();
-
-        try {
-            const auto &foundMeta = assetDb.findAssetMetaInfoByUid(*(nau::Uid::parseString(currentUid)));
-
-            eastl::string nausdPathE = assetDb.getNausdPathFromUid(*(nau::Uid::parseString(currentUid)));
-            std::string nausdPath = nausdPathE.c_str();
-
-            auto normalizePath = [](const std::string& p) {
-                std::string result = std::filesystem::absolute(p).string();
-                for (auto& c : result) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
-                return result;
-            };
-
-            if (normalizePath(nausdPath) == normalizePath(assetPath)) {
-                return true;
-            }
-
-        } catch (...) {
+        const auto parsedUid = nau::Uid::parseString(currentUid);
+        if (!parsedUid) {
             return true;
         }
 
-        const std::string newUid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        // The uid belongs to the asset this file was copied from only if that asset's file still exists.
+        // Unknown uid means a brand new asset, a missing original file means the asset was renamed or moved:
+        // in both cases the uid must be kept, otherwise references to the asset are lost.
+        auto& assetDb = nau::getServiceProvider().get<nau::IAssetDB>();
+        const eastl::string registeredNausdPath = assetDb.getNausdPathFromUid(*parsedUid);
+        if (registeredNausdPath.empty()) {
+            return true;
+        }
+
+        const std::filesystem::path registeredAssetPath = nau::FileSystemExtensions::resolveToNativePathContentFolder(registeredNausdPath.c_str());
+        std::error_code ec;
+        if (!std::filesystem::exists(registeredAssetPath, ec)) {
+            // Renaming keeps the file modification time, so the importer would treat the asset as up to date
+            // and keep the old path in the asset database. Touch the file to make it reimport under the new path.
+            std::filesystem::last_write_time(assetPath, std::filesystem::file_time_type::clock::now(), ec);
+            return true;
+        }
+        if (std::filesystem::equivalent(registeredAssetPath, assetPath, ec)) {
+            return true;
+        }
+
+        const std::string newUid = nau::toString(nau::Uid::generate());
         if (!uidAttr.Set(newUid)) {
             return false;
         }
+
+        // Renderer batches instances by material name, so a copy with the original prim name is drawn with the original material
+        if (assetPrim.GetTypeName() == pxr::TfToken("NauAssetMaterial")) {
+            // Same naming as for a newly created material, plus a uid suffix: a copied folder has the same file names
+            std::string stem = std::filesystem::path(assetPath).stem().string();
+            std::replace(stem.begin(), stem.end(), '(', '_');
+            std::erase(stem, ')');
+            const std::string newPrimName = pxr::TfMakeValidIdentifier(std::format("material_{}_{}", stem, newUid.substr(0, 8)));
+
+            pxr::SdfPrimSpecHandle primSpec = stage->GetRootLayer()->GetPrimAtPath(assetPrim.GetPath());
+            if (!primSpec || !primSpec->SetName(newPrimName)) {
+                NED_WARNING("Failed to rename material prim in {} to {}", assetPath, newPrimName);
+            }
+        }
+
         if (!stage->GetRootLayer()->Save()) {
             return false;
         }
