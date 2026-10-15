@@ -1,0 +1,86 @@
+{
+  "name": "M_EditorCamera_Nau",
+  "master": "file:/res/materials/embedded/standard_opaque.nmat_json",
+  "pipelines": {
+    "default": {
+      "properties": {
+        "albedoTex": "file:/editor_camera/textures/Camera_Palette_64_deferred.dds",
+        "normalTex": [
+          0.5,
+          0.5,
+          1.0,
+          1.0
+        ],
+        "metalRoughnessAoTex": [
+          1.0,
+          0.38,
+          0.12,
+          1.0
+        ]
+      },
+      "cullMode": "None",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    },
+    "deferred": {
+      "properties": {
+        "albedoTex": "file:/editor_camera/textures/Camera_Palette_64_deferred.dds",
+        "normalTex": [
+          0.5,
+          0.5,
+          1.0,
+          1.0
+        ],
+        "metalRoughnessAoTex": [
+          1.0,
+          0.38,
+          0.12,
+          1.0
+        ]
+      },
+      "cullMode": "None",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    },
+    "deferredEmissive": {
+      "properties": {
+        "albedoTex": "file:/editor_camera/textures/Camera_Palette_64_deferred.dds",
+        "normalTex": [
+          0.5,
+          0.5,
+          1.0,
+          1.0
+        ],
+        "metalRoughnessAoTex": [
+          1.0,
+          0.38,
+          0.12,
+          1.0
+        ]
+      },
+      "cullMode": "None",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    },
+    "instanced": {
+      "properties": {
+        "albedoTex": "file:/editor_camera/textures/Camera_Palette_64_deferred.dds",
+        "normalTex": [
+          0.5,
+          0.5,
+          1.0,
+          1.0
+        ],
+        "metalRoughnessAoTex": [
+          1.0,
+          0.38,
+          0.12,
+          1.0
+        ]
+      },
+      "cullMode": "None",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    }
+  }
+}
