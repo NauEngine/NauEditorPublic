@@ -1,4 +1,4 @@
-﻿// Copyright 2024 N-GINN LLC. All rights reserved.
+// Copyright 2024 N-GINN LLC. All rights reserved.
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 //
 // Dialog that allows to configure and run the project build.
@@ -35,6 +35,11 @@ class NauBuildStartupDailog : public NauDialog
 
 public:
     NauBuildStartupDailog(const NauProject& project, NauMainWindow* parent);
+
+    void done(int result) override;
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
 
 private:
     void runBuild();

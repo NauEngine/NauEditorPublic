@@ -8,6 +8,7 @@
 
 #include "QFileDialog"
 #include <QDesktopServices>
+#include <QCloseEvent>
 #include <QThread>
 #include <QPointer>
 
@@ -165,6 +166,25 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     }
 }
 
+void NauBuildStartupDailog::done(int result)
+{
+    if (m_currentBuildState == BuildState::Building) {
+        return;
+    }
+
+    NauDialog::done(result);
+}
+
+void NauBuildStartupDailog::closeEvent(QCloseEvent* event)
+{
+    if (m_currentBuildState == BuildState::Building) {
+        event->ignore();
+        return;
+    }
+
+    NauDialog::closeEvent(event);
+}
+
 void NauBuildStartupDailog::setBuildState(BuildState state)
 {
     m_currentBuildState = state;
@@ -239,20 +259,18 @@ void NauBuildStartupDailog::runBuild()
     settings.openAfterBuild =
         m_postBuildAction->currentData().toInt() == +AfterBuildAction::OpenDirectory;
 
-    const NauProject& project = m_project;
-
     auto cancelFlag = std::make_shared<std::atomic_bool>(false);
     m_cancelBuildFlag = cancelFlag;
 
     setBuildState(BuildState::Building);
 
-    auto* buildThread = QThread::create([this, settings, &project, cancelFlag] {
+    auto* buildThread = QThread::create([this, settings, cancelFlag] {
         NauWinDllCompilerCpp compiler;
         std::vector<std::string> logStrings;
 
         const bool success = compiler.buildProject(
             settings,
-            project,
+            m_project,
             logStrings,
             [](const QString&) {},
             [cancelFlag] {
