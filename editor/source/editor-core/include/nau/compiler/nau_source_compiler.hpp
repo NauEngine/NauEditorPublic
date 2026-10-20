@@ -40,5 +40,5 @@ public:
     bool compileProjectSource(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
     bool checkBuildTool(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
     bool checkCmakeInPath(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
-    bool buildProject(const NauBuildSettings& buildSettings, const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled = {}) override;
+    bool buildProject(const NauBuildSettings& buildSettings, const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled) override;
 };

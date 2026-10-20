@@ -11,6 +11,8 @@
 #include <QCloseEvent>
 #include <QThread>
 #include <QPointer>
+#include <QUrl>
+#include <utility>
 
 
 // Build logger macro
@@ -282,13 +284,9 @@ void NauBuildStartupDailog::runBuild()
 
         QMetaObject::invokeMethod(
             this,
-            [guard, success, logStrings, cancelFlag] {
+            [guard, success, logStrings = std::move(logStrings), cancelFlag] {
                 if (!guard) {
                     return;
-                }
-
-                for (const auto& str : logStrings) {
-                    NED_BUILD_CRITICAL(str);
                 }
 
                 if (cancelFlag->load()) {
@@ -296,6 +294,10 @@ void NauBuildStartupDailog::runBuild()
                     guard->setBuildState(BuildState::None);
                     guard->m_buildStatusLabel->setText(tr("Build cancelled"));
                     return;
+                }
+
+                for (const auto& str : logStrings) {
+                    NED_BUILD_CRITICAL(str);
                 }
 
                 if (success) {
