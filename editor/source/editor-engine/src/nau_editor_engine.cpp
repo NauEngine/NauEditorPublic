@@ -128,7 +128,7 @@ namespace
 
                     if (strings::icaseEqual(entry.path().extension().wstring(), L".json")) {
                         if (const auto mergeResult = mergePropertiesFromFile(globalProperties, entry.path()); !mergeResult) {
-                            NAU_LOG_WARNING("Fail to read configuration file:({}),({})", entry.path().string(), mergeResult.getError()->getMessage());
+                            NAU_LOG_WARNING("Fail to read configuration file:({}),({})", nau::pathToUtf8(entry.path()), mergeResult.getError()->getMessage());
                         }
                     }
 
@@ -215,10 +215,10 @@ bool NauEditorEngine::initialize(const std::string& rootDir, const std::string& 
             const QString projectModulesList = projectModules.join(",");
             if (!projectModulesList.isEmpty()) {
 
-                const fs::path userDllDirPath = fs::u8path(userDllDir);
+                const fs::path userDllDirPath = fs::path(std::u8string(userDllDir.begin(), userDllDir.end()));
                 if (fs::exists(userDllDirPath)) {
                     for (auto& module : projectModules) {
-                        const fs::path dllPath = (userDllDirPath / fs::u8path(module.toStdString())).replace_extension(".dll");
+                        const fs::path dllPath = (userDllDirPath / fs::path(module.toStdWString())).replace_extension(".dll");
                         if (fs::exists(dllPath)) {
                             NauCheckResult(getModuleManager().loadModule(module.toStdString().c_str(), nau::pathToUtf8(dllPath)));
                         }
@@ -251,7 +251,7 @@ bool NauEditorEngine::initialize(const std::string& rootDir, const std::string& 
     auto args = std::make_unique<nau::ImportAssetsArguments>();
     args->projectPath = rootDir;
 
-    if (std::filesystem::exists(std::filesystem::u8path(rootDir) / "assets_database/database.db"))
+    if (std::filesystem::exists(fs::path(std::u8string(rootDir.begin(), rootDir.end())) / "assets_database/database.db"))
     {
         nau::getServiceProvider().get<nau::IAssetDB>().addAssetDB("assets_database/database.db");
     }

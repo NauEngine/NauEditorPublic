@@ -38,7 +38,7 @@ void NauAssetManager::initialize(const NauProject& project)
 
 void NauAssetManager::importAsset(const std::string& sourcePath)
 {
-    m_assetProcessor->importAsset(m_projectPath, std::filesystem::u8path(sourcePath));
+    m_assetProcessor->importAsset(m_projectPath, std::filesystem::path(std::u8string(sourcePath.begin(), sourcePath.end())));
 }
 
 std::shared_ptr<NauProjectBrowserItemTypeResolverInterface> NauAssetManager::typeResolver()
@@ -54,20 +54,23 @@ std::string NauAssetManager::sourcePathFromAsset(const std::string& assetPath)
     if (!assetInfo.empty() && assetInfo[0].type == "material") // todo add method IsMetaAsAsset()->bool
         return assetPath;
 
-    const std::string nausdRelativePath = nau::pathToUtf8(nau::FileSystemExtensions::getRelativeAssetPath(std::filesystem::u8path(assetPath), false));
+    const std::filesystem::path nativeAssetPath(std::u8string(assetPath.begin(), assetPath.end()));
+    const std::string nausdRelativePath = nau::pathToUtf8(nau::FileSystemExtensions::getRelativeAssetPath(nativeAssetPath, false));
     auto sourceRelativePath = assetDb.getSourcePathFromNausdPath(nausdRelativePath.c_str()); /// +"." + assetInfo[0].type.c_str();
-    std::string sourceAbsolutePath = nau::FileSystemExtensions::resolveToNativePathContentFolder(sourceRelativePath.data());
+    const std::string sourceAbsolutePath = nau::FileSystemExtensions::resolveToNativePathContentFolder(sourceRelativePath.data());
+    std::filesystem::path nativeSourcePath(std::u8string(sourceAbsolutePath.begin(), sourceAbsolutePath.end()));
 
-    if (!std::filesystem::exists(std::filesystem::u8path(sourceAbsolutePath)) || std::filesystem::is_directory(std::filesystem::u8path(sourceAbsolutePath))) {
-        sourceAbsolutePath = nau::pathToUtf8(std::filesystem::u8path(assetPath).replace_extension());
+    if (!std::filesystem::exists(nativeSourcePath) || std::filesystem::is_directory(nativeSourcePath)) {
+        nativeSourcePath = nativeAssetPath;
+        nativeSourcePath.replace_extension();
     }
 
-    if (!std::filesystem::exists(std::filesystem::u8path(sourceAbsolutePath)) || std::filesystem::is_directory(std::filesystem::u8path(sourceAbsolutePath))) {
+    if (!std::filesystem::exists(nativeSourcePath) || std::filesystem::is_directory(nativeSourcePath)) {
         NED_ERROR("Source file does not exist!");
         return std::string();
     }
 
-    return sourceAbsolutePath;
+    return nau::pathToUtf8(nativeSourcePath);
 }
 
 std::string_view NauAssetManager::assetFileFilter() const
@@ -126,7 +129,8 @@ void NauAssetManager::onAssetChanged(const std::string& assetPath)
         return;
     }
 
-    const std::string nausdRelativePath = nau::pathToUtf8(nau::FileSystemExtensions::getRelativeAssetPath(std::filesystem::u8path(assetPath), true));
+    const std::filesystem::path nativeAssetPath(std::u8string(assetPath.begin(), assetPath.end()));
+    const std::string nausdRelativePath = nau::pathToUtf8(nau::FileSystemExtensions::getRelativeAssetPath(nativeAssetPath, true));
     auto uid = m_assetDb.getUidFromSourcePath(nausdRelativePath.c_str());
     if (!uid) {
         return;
@@ -140,7 +144,7 @@ void NauAssetManager::onAssetChanged(const std::string& assetPath)
          unloadResult = asset->unload();
      }
      
-     m_assetProcessor->importAsset(m_projectPath, std::filesystem::u8path(assetPath));
+     m_assetProcessor->importAsset(m_projectPath, nativeAssetPath);
      
      // Load asset again if needed
      state = asset->getLoadState();
@@ -151,7 +155,7 @@ void NauAssetManager::onAssetChanged(const std::string& assetPath)
 
 void NauAssetManager::assetAdded(const std::string& assetPath)
 {
-    m_assetProcessor->importAsset(m_projectPath, std::filesystem::u8path(assetPath));
+    m_assetProcessor->importAsset(m_projectPath, std::filesystem::path(std::u8string(assetPath.begin(), assetPath.end())));
 
     m_assetDb.reloadAssetDB("assets_database/database.db");
     const auto sourcePath = sourcePathFromAsset(assetPath);
@@ -168,7 +172,7 @@ void NauAssetManager::assetRemoved(const std::string& assetPath)
 
 void NauAssetManager::sourceAdded(const std::string& sourcePath)
 {
-    m_assetProcessor->importAsset(m_projectPath, std::filesystem::u8path(sourcePath));
+    m_assetProcessor->importAsset(m_projectPath, std::filesystem::path(std::u8string(sourcePath.begin(), sourcePath.end())));
 }
 
 void NauAssetManager::sourceRemoved(const std::string& sourcePath)

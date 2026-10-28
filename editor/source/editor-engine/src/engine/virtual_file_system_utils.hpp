@@ -13,7 +13,7 @@ namespace editor::vfsUtils
     void configureVirtualFileSystem(nau::io::IVirtualFileSystem& vfs, const std::string& rootPath)
     {
         namespace fs = std::filesystem;
-        const fs::path projectRoot = fs::u8path(rootPath);
+        const fs::path projectRoot = fs::path(std::u8string(rootPath.begin(), rootPath.end()));
         const eastl::vector<std::pair<const char*, fs::path>> contentRelativePaths = {
             {"/content", {L"content"}},
             {"/res"    , {L"resources"}},
