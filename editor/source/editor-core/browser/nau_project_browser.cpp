@@ -279,26 +279,34 @@ NauProjectBrowser::NauProjectBrowser(NauShortcutHub* shortcutHub, NauWidget* par
         }
 
         if (QMessageBox::question(this, tr("NauEditor"),
-                tr("Delete selected item(s)? This action cannot be undone.")) != QMessageBox::StandardButton::Yes) {
+                tr("Delete selected item(s)? They will be moved to trash.")) != QMessageBox::StandardButton::Yes) {
             NED_TRACE("User rejected to delete resource(s)");
             return;
         }
 
+        QStringList failedFileList;
         for (const auto& file : delFileList) {
             // Note that it's a bad idea to remove resource via WinAPI
             // Underlying Qt's FS model installs the watchers that can lead to files to be locked on Windows.
             const QModelIndex fsModelIndex = m_fsModel->index(file);
             const QString path = fsModelIndex.data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
-            const bool result = NauFileOperations::deletePathRecursively(path);
-            
+            const bool result = NauFileOperations::moveToTrash(path);
+
             if (!result) {
                 NED_ERROR("Failed to move to trash {}", file.toUtf8().constData());
+                failedFileList << QDir::toNativeSeparators(m_projectRootDir.relativeFilePath(file));
             } else {
                 NED_TRACE("Successfully moved to trash {}", file.toUtf8().constData());
             }
         }
 
         setCurrentDirInList(m_tree->currentIndex());
+
+        if (!failedFileList.isEmpty()) {
+            QMessageBox::warning(this, tr("NauEditor"),
+                tr("Failed to move the following item(s) to trash. They may be in use by the editor or another program:\n%1")
+                    .arg(failedFileList.join("\n")));
+        }
     });
 
     connect(m_fileOperationMenu.get(), &NauProjectBrowserFileOperationsMenu::eventViewInShellRequested,

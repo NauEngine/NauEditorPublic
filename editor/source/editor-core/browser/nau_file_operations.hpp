@@ -19,8 +19,9 @@ public:
     static void cutToClipboard(const QModelIndexList& indexes);
     static void pasteFromClipboard(const QModelIndex& parent);
 
-    // Moves specified path to trash. 
-    static bool deletePathRecursively(const QString& path);
+    // Moves specified file or directory to trash as a single item, so it can be restored as a whole.
+    // Returns false if path doesn't exist or can't be moved (e.g. some file is locked).
+    static bool moveToTrash(const QString& path);
 
     static void duplicate(const QModelIndexList& indexes);
 

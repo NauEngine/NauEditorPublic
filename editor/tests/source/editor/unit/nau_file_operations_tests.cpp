@@ -5,6 +5,23 @@
 
 #include <gtest/gtest.h>
 
+#include <QDir>
+#include <QFile>
+#include <QFileSystemWatcher>
+#include <QTemporaryDir>
+
+
+namespace
+{
+    bool createFile(const QString& path)
+    {
+        QDir().mkpath(QFileInfo{path}.absolutePath());
+
+        QFile file{path};
+        return file.open(QIODevice::WriteOnly) && file.write("nau") == 3;
+    }
+}
+
 
 TEST(NauFileOperationsTests, simpleFileName)
 {
@@ -135,4 +152,86 @@ TEST(NauFileOperationsTests, incrementComplexFileName)
 
     // Assert
     EXPECT_EQ(generatedFileName, expectedFileName);
+}
+
+TEST(NauFileOperationsTests, moveToTrashNonExistentPath)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+
+    // Act
+    const bool result = NauFileOperations::moveToTrash(tempDir.filePath("missing"));
+
+    // Assert
+    EXPECT_FALSE(result);
+}
+
+TEST(NauFileOperationsTests, moveToTrashDirectoryWithContent)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString dirPath = tempDir.filePath("folder");
+    ASSERT_TRUE(createFile(dirPath + "/file.txt"));
+    ASSERT_TRUE(createFile(dirPath + "/sub/subsub/file.txt"));
+
+    // Act
+    const bool result = NauFileOperations::moveToTrash(dirPath);
+
+    // Assert
+    EXPECT_TRUE(result);
+    EXPECT_FALSE(QFileInfo::exists(dirPath));
+}
+
+TEST(NauFileOperationsTests, copyPathRecursively)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString srcPath = tempDir.filePath("src");
+    const QString dstPath = tempDir.filePath("dst");
+    ASSERT_TRUE(createFile(srcPath + "/file.txt"));
+    ASSERT_TRUE(createFile(srcPath + "/sub/file.txt"));
+
+    // Act
+    const bool result = NauFileOperations::copyPathRecursively(srcPath, dstPath);
+
+    // Assert
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(QFileInfo::exists(dstPath + "/file.txt"));
+    EXPECT_TRUE(QFileInfo::exists(dstPath + "/sub/file.txt"));
+    EXPECT_TRUE(QFileInfo::exists(srcPath + "/sub/file.txt"));
+}
+
+TEST(NauFileOperationsTests, copyPathRecursivelyNonExistentSource)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+
+    // Act
+    const bool result = NauFileOperations::copyPathRecursively(tempDir.filePath("missing"), tempDir.filePath("dst"));
+
+    // Assert
+    EXPECT_FALSE(result);
+}
+
+TEST(NauFileOperationsTests, moveToTrashWatchedDirectoryReportsFailure)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString dirPath = tempDir.filePath("watched");
+    ASSERT_TRUE(createFile(dirPath + "/sub/file.txt"));
+
+    // Windows doesn't allow moving a watched directory, but Qt reports success anyway.
+    QFileSystemWatcher watcher;
+    watcher.addPaths({dirPath, dirPath + "/sub"});
+
+    // Act
+    const bool result = NauFileOperations::moveToTrash(dirPath);
+
+    // Assert
+    EXPECT_EQ(result, !QFileInfo::exists(dirPath));
 }

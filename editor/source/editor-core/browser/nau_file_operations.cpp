@@ -228,13 +228,17 @@ bool NauFileOperations::movePathRecursively(const QString& src, const QString& d
     return NauDir().rmdir(src);
 }
 
-bool NauFileOperations::deletePathRecursively(const QString& path)
+bool NauFileOperations::moveToTrash(const QString& path)
 {
-    const NauDir dir(path);
-    for (const QString& dirEntry : dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-        if (!deletePathRecursively(dir.absoluteFilePath(dirEntry))) return false;
+    if (!QFileInfo::exists(path)) {
+        NED_WARNING("Unable to move to trash {}: path doesn't exist", path.toUtf8().constData());
+        return false;
     }
 
-    return QFile::moveToTrash(path);
+    // Directories are moved with their content at once. Moving the content item by item
+    // creates a separate trash entry for each subdirectory and leaves a partially removed tree on failure.
+    // Note that Qt reports success without moving anything if Windows declines the operation,
+    // e.g. when the directory is watched by QFileSystemWatcher. So make sure the path has really gone.
+    return QFile::moveToTrash(path) && !QFileInfo::exists(path);
 }
 
