@@ -12,6 +12,8 @@
 #include "magic_enum/magic_enum.hpp"
 #include "magic_enum/magic_enum_iostream.hpp"
 
+#include <QDirIterator>
+
 // ** NauProjectFileSystemProxyModel
 
 NauProjectFileSystemProxyModel::NauProjectFileSystemProxyModel(const NauDir& rootDir, QObject* parent)
@@ -52,6 +54,23 @@ void NauProjectFileSystemProxyModel::setUserDefinedTypeFilters(const QList<NauEd
 void NauProjectFileSystemProxyModel::setUndeletableFileTypes(const QList<NauEditorFileType>& itemTypes)
 {
     m_undeletableTypes = itemTypes;
+}
+
+bool NauProjectFileSystemProxyModel::containsUndeletableItems(const QString& dirPath) const
+{
+    if (m_undeletableTypes.isEmpty() || !QFileInfo{dirPath}.isDir()) return false;
+
+    const auto fsModel = dynamic_cast<const NauProjectBrowserFileSystemModel*>(sourceModel());
+    NED_ASSERT(fsModel);
+
+    QDirIterator it(dirPath, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        if (m_undeletableTypes.contains(fsModel->resolveItemType(it.next()))) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void NauProjectFileSystemProxyModel::setBlackListResourcesWildcard(const QStringList& blackList)

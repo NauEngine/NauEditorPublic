@@ -46,6 +46,10 @@ public:
     // but are not permitted to move or delete.
     void setUndeletableFileTypes(const QList<NauEditorFileType>& itemTypes);
 
+    // Returns true if specified directory contains (recursively) any item of undeletable type.
+    // Flags of a directory don't take its content into account, so check it before moving or deleting.
+    bool containsUndeletableItems(const QString& dirPath) const;
+
     // Has this model any user defined filters currently.
     // See setUserDefinedTypeFilters() and setUserDefinedFilters().
     bool hasUserDefinedFilters() const;

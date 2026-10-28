@@ -106,15 +106,7 @@ QVariant NauProjectBrowserFileSystemModel::data(const QModelIndex& index, int ro
     }
 
     if (role == NauFsModelRoles::FileItemTypeRole) {
-        NauEditorFileType type = NauEditorFileType::Unrecognized;
-        for (const auto& resolver : m_itemTypeResolvers) {
-            const NauEditorFileType resolveAttempt = resolver->resolve(fileInfo(index).filePath()).type;
-            if (resolveAttempt != NauEditorFileType::Unrecognized) {
-                type = resolveAttempt;
-                break;
-            }
-        }
-
+        const NauEditorFileType type = resolveItemType(fileInfo(index).filePath());
         return static_cast<std::underlying_type_t<NauEditorFileType>>(type);
     }
 
@@ -155,6 +147,18 @@ QVariant NauProjectBrowserFileSystemModel::headerData(int section, Qt::Orientati
 int NauProjectBrowserFileSystemModel::columnCount(const QModelIndex& parent) const
 {
     return magic_enum::enum_count<Column>();
+}
+
+NauEditorFileType NauProjectBrowserFileSystemModel::resolveItemType(const QString& filePath) const
+{
+    for (const auto& resolver : m_itemTypeResolvers) {
+        const NauEditorFileType resolveAttempt = resolver->resolve(filePath).type;
+        if (resolveAttempt != NauEditorFileType::Unrecognized) {
+            return resolveAttempt;
+        }
+    }
+
+    return NauEditorFileType::Unrecognized;
 }
 
 NauProjectBrowserFileSystemModel::Column NauProjectBrowserFileSystemModel::sortTypeToColumn(NauSortType type)

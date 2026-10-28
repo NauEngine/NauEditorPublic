@@ -13,7 +13,6 @@
 
 #include "project/nau_project.hpp"
 #include "magic_enum/magic_enum.hpp"
-#include "magic_enum/magic_enum_utility.hpp"
 #include "filter/nau_search_widget.hpp"
 #include "themes/nau_theme.hpp"
 #include "nau/nau_constants.hpp"
@@ -228,7 +227,11 @@ NauProjectBrowser::NauProjectBrowser(NauShortcutHub* shortcutHub, NauWidget* par
     });
 
     connect(m_fileOperationMenu.get(), &NauProjectBrowserFileOperationsMenu::eventCutRequested,
-        NauFileOperations::cutToClipboard);
+        [this](const QModelIndexList& indexes) {
+        if (!checkNoUndeletableContent(indexes)) return;
+
+        NauFileOperations::cutToClipboard(indexes);
+    });
 
     connect(m_fileOperationMenu.get(), &NauProjectBrowserFileOperationsMenu::eventDuplicateRequested,
          [this](const QModelIndexList& indexes) {
@@ -267,6 +270,8 @@ NauProjectBrowser::NauProjectBrowser(NauShortcutHub* shortcutHub, NauWidget* par
 
     connect(m_fileOperationMenu.get(), &NauProjectBrowserFileOperationsMenu::eventDeleteRequested, 
         [this](QAbstractItemView* view, const QModelIndexList& indexes) {
+        if (!checkNoUndeletableContent(indexes)) return;
+
         QStringList delFileList;
 
         for (const QModelIndex& index : indexes) {
@@ -360,6 +365,12 @@ bool NauProjectBrowser::setProject(const NauProject& project)
     m_fsProxy->setSourceModel(m_fsModel.get());
     m_fsProxy->setAllowedDirs({"\\content\\", "\\source\\"});
     m_fsProxy->setBlackListResourcesWildcard({"\\content\\shaders"});
+    m_fsProxy->setUndeletableFileTypes({
+        NauEditorFileType::Project,
+        NauEditorFileType::EngineCore,
+        NauEditorFileType::Scene,
+        NauEditorFileType::Shader,
+    });
 
     m_treeProxy = std::make_unique<NauProjectTreeProxyModel>();
     m_treeProxy->setSourceModel(m_fsProxy.get());
@@ -388,7 +399,11 @@ bool NauProjectBrowser::setProject(const NauProject& project)
     m_contentViewScale->setScale(0.5);
     m_sortTypeWidget->setSortTypeAndOrder(NauSortType::Name, NauSortOrder::Ascending);
 
-    m_fileOperationMenu->setProjectDir(m_projectRootDir);
+    m_fileOperationMenu->setProtectedDirs({
+        m_projectRootDir,
+        NauDir(project.defaultContentFolder()),
+        NauDir(project.defaultSourceFolder()),
+    });
     m_tree->setItemDelegate(m_treeDelegate.get());
 
     // Note that we clear indentation of tree itself, for our delegate can handle this.
@@ -629,6 +644,28 @@ void NauProjectBrowser::handleSourceDirChanged()
     emit eventSourceChanged(m_projectSourceDir);
 
     installSourceDirWatcher();
+}
+
+bool NauProjectBrowser::checkNoUndeletableContent(const QModelIndexList& indexes)
+{
+    QStringList protectedDirs;
+    for (const QModelIndex& index : indexes) {
+        const QString path = index.data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
+        if (m_fsProxy->containsUndeletableItems(path)) {
+            protectedDirs << QDir::toNativeSeparators(m_projectRootDir.relativeFilePath(path));
+        }
+    }
+
+    if (protectedDirs.isEmpty()) return true;
+
+    NED_WARNING("Operation declined: {} contain(s) items that cannot be moved or deleted",
+        protectedDirs.join(", ").toUtf8().constData());
+
+    QMessageBox::warning(this, tr("NauEditor"),
+        tr("The following folder(s) contain scenes or other items that cannot be moved or deleted:\n%1")
+            .arg(protectedDirs.join("\n")));
+
+    return false;
 }
 
 std::vector<NauEditorFileType> NauProjectBrowser::filterableItemTypes()

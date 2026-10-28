@@ -38,7 +38,8 @@ public:
     // Force to update internal data for the specified view.
     void updateViewSelectionData(QAbstractItemView* view);
 
-    void setProjectDir(const NauDir& projectDir);
+    // Specified directories are not permitted to copy, cut, duplicate, rename or delete.
+    void setProtectedDirs(const QList<NauDir>& protectedDirs);
 
 signals:
     void eventCopyRequested(const QModelIndexList& indexes);
@@ -53,7 +54,7 @@ signals:
 
 private:
     static bool isValidDir(const QModelIndex& index);
-    bool isProjectDir(const QModelIndex& index) const;
+    bool isProtectedDir(const QModelIndex& index) const;
 
 private:
     NauShortcutHub* const m_shortcutHub;
@@ -70,5 +71,5 @@ private:
     };
 
     QHash<QAbstractItemView*, ViewData> m_views;
-    NauDir m_projectDir;
+    QList<NauDir> m_protectedDirs;
 };
