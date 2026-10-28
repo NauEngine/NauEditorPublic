@@ -29,6 +29,16 @@ void NauFileOperations::cutToClipboard(const QModelIndexList& indexes)
     auto mimeData = prepareCopyCut(indexes);
     if (!mimeData) return;
 
+    // Asset meta file refers to its source by relative path, so the source has to be moved too.
+    QList<QUrl> urls = mimeData->urls();
+    for (const QUrl& url : mimeData->urls()) {
+        const QString sourcePath = assetSourcePath(url.toLocalFile());
+        if (!sourcePath.isEmpty()) {
+            urls.append(QUrl::fromLocalFile(sourcePath));
+        }
+    }
+    mimeData->setUrls(urls);
+
     mimeData->setData(cutOperationMimeType(), cutDropEffectData());
     QApplication::clipboard()->setMimeData(mimeData);
 }
@@ -240,5 +250,15 @@ bool NauFileOperations::moveToTrash(const QString& path)
     // Note that Qt reports success without moving anything if Windows declines the operation,
     // e.g. when the directory is watched by QFileSystemWatcher. So make sure the path has really gone.
     return QFile::moveToTrash(path) && !QFileInfo::exists(path);
+}
+
+QString NauFileOperations::assetSourcePath(const QString& path)
+{
+    static const auto assetMetaFileExtension = QStringLiteral(".nausd");
+
+    if (!path.endsWith(assetMetaFileExtension, Qt::CaseInsensitive)) return QString();
+
+    const QString sourcePath = path.chopped(assetMetaFileExtension.size());
+    return QFileInfo{sourcePath}.isFile() ? sourcePath : QString();
 }
 

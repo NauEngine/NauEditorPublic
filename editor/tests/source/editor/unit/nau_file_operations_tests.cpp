@@ -154,6 +154,67 @@ TEST(NauFileOperationsTests, incrementComplexFileName)
     EXPECT_EQ(generatedFileName, expectedFileName);
 }
 
+TEST(NauFileOperationsTests, assetSourcePathOfMetaFileWithSource)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString sourcePath = tempDir.filePath("texture.png");
+    ASSERT_TRUE(createFile(sourcePath));
+    ASSERT_TRUE(createFile(sourcePath + ".nausd"));
+
+    // Act
+    const QString& result = NauFileOperations::assetSourcePath(sourcePath + ".nausd");
+
+    // Assert
+    EXPECT_EQ(result, sourcePath);
+}
+
+TEST(NauFileOperationsTests, assetSourcePathOfMetaFileWithoutSource)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString metaPath = tempDir.filePath("material.nausd");
+    ASSERT_TRUE(createFile(metaPath));
+
+    // Act
+    const QString& result = NauFileOperations::assetSourcePath(metaPath);
+
+    // Assert
+    EXPECT_TRUE(result.isEmpty());
+}
+
+TEST(NauFileOperationsTests, assetSourcePathOfNonMetaFile)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString sourcePath = tempDir.filePath("texture.png");
+    ASSERT_TRUE(createFile(sourcePath));
+
+    // Act
+    const QString& result = NauFileOperations::assetSourcePath(sourcePath);
+
+    // Assert
+    EXPECT_TRUE(result.isEmpty());
+}
+
+TEST(NauFileOperationsTests, assetSourcePathIgnoresDirectory)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    ASSERT_TRUE(QDir().mkpath(tempDir.filePath("folder")));
+    ASSERT_TRUE(createFile(tempDir.filePath("folder.nausd")));
+
+    // Act
+    const QString& result = NauFileOperations::assetSourcePath(tempDir.filePath("folder.nausd"));
+
+    // Assert
+    EXPECT_TRUE(result.isEmpty());
+}
+
 TEST(NauFileOperationsTests, moveToTrashNonExistentPath)
 {
     // Arrange

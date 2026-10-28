@@ -290,7 +290,11 @@ NauProjectBrowser::NauProjectBrowser(NauShortcutHub* shortcutHub, NauWidget* par
             // Underlying Qt's FS model installs the watchers that can lead to files to be locked on Windows.
             const QModelIndex fsModelIndex = m_fsModel->index(file);
             const QString path = fsModelIndex.data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
-            const bool result = NauFileOperations::moveToTrash(path);
+
+            // Source is removed first: otherwise it will be imported again with a new meta file.
+            const QString sourcePath = NauFileOperations::assetSourcePath(path);
+            const bool result = (sourcePath.isEmpty() || NauFileOperations::moveToTrash(sourcePath))
+                && NauFileOperations::moveToTrash(path);
 
             if (!result) {
                 NED_ERROR("Failed to move to trash {}", file.toUtf8().constData());
