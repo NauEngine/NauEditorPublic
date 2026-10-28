@@ -25,7 +25,7 @@ QIcon NauAssetPreview::assetPreview(const QString& assetPath)
 {
     // TODO: Get thumbnail manager as singleton or store pointer to manager in this class
     auto thumbnailManager = Nau::Editor().thumbnailManager();
-    const std::filesystem::path stdAssetPath = assetPath.toUtf8().constData();
+    const std::filesystem::path stdAssetPath = assetPath.toStdWString();
     
-    return QIcon(thumbnailManager->thumbnailForAsset(stdAssetPath).second.string().c_str());
+    return QIcon(QString::fromStdWString(thumbnailManager->thumbnailForAsset(stdAssetPath).second.wstring()));
 }

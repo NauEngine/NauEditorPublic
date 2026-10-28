@@ -12,6 +12,7 @@
 #include "pxr/usd/sdf/listEditorProxy.h"
 #include "nau/assets/nau_file_types.hpp"
 #include "nau/asset_tools/asset_api.h"
+#include "nau/shared/file_system.h"
 
 #include <QApplication>
 #include "nau/usd_meta_tools/usd_meta_info.h"
@@ -109,7 +110,7 @@ public:
 
 void NauUsdAssetProcessor::setAssetFileUid(const std::filesystem::path& assetSource)
 {
-    auto stage = pxr::UsdStage::Open(assetSource.string());
+    auto stage = pxr::UsdStage::Open(nau::pathToUtf8(assetSource));
     if (!stage) {
         return;
     }
@@ -137,9 +138,9 @@ int NauUsdAssetProcessor::importAsset(const std::filesystem::path& project, cons
 {
     auto args = std::make_unique<nau::ImportAssetsArguments>();
 
-    args->projectPath = project.string();
-    if (!assetSource.string().empty()) {
-        args->assetPath = assetSource.string();
+    args->projectPath = nau::pathToUtf8(project);
+    if (!assetSource.empty()) {
+        args->assetPath = nau::pathToUtf8(assetSource);
     }
 
     // TODO: remove this code when compiler sequence will be in right order.

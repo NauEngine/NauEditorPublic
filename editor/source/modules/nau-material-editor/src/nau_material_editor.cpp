@@ -10,6 +10,7 @@
 #include "nau/undo-redo/nau_usd_scene_commands.hpp"
 
 #include "nau/usd_meta_tools/usd_meta_generator.h"
+#include "nau/shared/file_system.h"
 
 #include <QFileInfo>
 
@@ -78,7 +79,7 @@ void NauMaterialEditor::preTerminate()
 void NauMaterialEditor::createAsset(const std::string& assetPath)
 {
     bool result = nau::UsdMetaGenerator::instance().generateAssetTemplate(assetPath, "Material", nau::MetaArgs());
-    if (!result || !std::filesystem::exists(assetPath)) {
+    if (!result || !std::filesystem::exists(std::filesystem::path(std::u8string(assetPath.begin(), assetPath.end())))) {
         NED_ERROR("Failed to create material asset.");
     }
 }
@@ -143,14 +144,15 @@ bool NauMaterialEditor::saveAsset(const std::string& assetPath)
     auto translator = mainSceneEditor.sceneSynchronizer().translator();
 
     std::function<void(UsdTranslator::IPrimAdapter::Ptr)> updatePrimMaterial;
-    std::filesystem::path currentAssetPath = m_materialAssetPath;
+    const std::filesystem::path currentAssetPath(std::u8string(m_materialAssetPath.begin(), m_materialAssetPath.end()));
     updatePrimMaterial = [currentAssetPath, &updatePrimMaterial, translator](UsdTranslator::IPrimAdapter::Ptr adapter) {
         if (adapter->getType() == "AssetMesh") {
             if (pxr::VtValue materialPath; UsdProxy::UsdProxyPrim(adapter->getPrim()).getProperty("Material:assign"_tftoken)->getValue(&materialPath))
             {
                 if(materialPath.CanCast<pxr::SdfAssetPath>())
                 {
-                    std::filesystem::path assetPath = materialPath.Get<pxr::SdfAssetPath>().GetResolvedPath();
+                    const auto& resolvedPath = materialPath.Get<pxr::SdfAssetPath>().GetResolvedPath();
+                    const std::filesystem::path assetPath(std::u8string(resolvedPath.begin(), resolvedPath.end()));
                     if (assetPath == currentAssetPath) {
                         translator->forceUpdate(adapter->getPrim());
                     }
@@ -290,10 +292,10 @@ void NauMaterialEditor::initInspectorClient()
 
 void NauMaterialEditor::openPreviewScene()
 {
-    const std::filesystem::path templatesPath = Nau::Editor().currentProject()->assetTemplatesFolder().toUtf8().constData();
+    const std::filesystem::path templatesPath = Nau::Editor().currentProject()->assetTemplatesFolder().toStdWString();
     if (std::filesystem::exists(templatesPath/"material_preview_sceneTemplate.nausd_scene"))
     {
-        m_previewStage = pxr::UsdStage::Open((templatesPath/"material_preview_sceneTemplate.nausd_scene").string());
+        m_previewStage = pxr::UsdStage::Open(nau::pathToUtf8(templatesPath/"material_preview_sceneTemplate.nausd_scene"));
     }
     if (!m_previewStage || !m_previewStage->GetPseudoRoot().IsValid() || !m_previewStage->GetDefaultPrim())
     {

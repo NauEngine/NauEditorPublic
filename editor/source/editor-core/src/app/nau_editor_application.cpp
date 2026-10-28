@@ -22,6 +22,7 @@
 #include <pxr/base/plug/registry.h>
 
 #include "nau/shared/logger.h"
+#include "nau/shared/file_system.h"
 #include "nau/diag/log_subscribers.h"
 
 #include <QStandardPaths>
@@ -98,7 +99,7 @@ bool NauEditorApplication::initialize(int argc, char* argv[])
     }
 
     // Setup logging
-    nau::logger::init(std::filesystem::current_path().string(), true);
+    nau::logger::init(nau::pathToUtf8(std::filesystem::current_path()), true);
 
     // Init editor service provider
     Nau::SetDefaultEditorServiceProvider(nau::createServiceProvider());

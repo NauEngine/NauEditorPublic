@@ -393,7 +393,7 @@ void NauEditor::configureProjectBrowser()
 
 void NauEditor::configureThumbnailManager()
 {
-    const std::filesystem::path projectPath = m_project->path().root().absolutePath().toUtf8().constData();
+    const std::filesystem::path projectPath = m_project->path().root().absolutePath().toStdWString();
     // TODO: Store thumbnails not in the project?
     const std::filesystem::path thumbnailsFolder = projectPath / ".editor" / "thumbnails";
     m_thumbnailManager = std::make_shared<NauThumbnailManager>(thumbnailsFolder, m_assetManager->typeResolver());
