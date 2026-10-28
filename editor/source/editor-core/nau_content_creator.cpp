@@ -93,7 +93,7 @@ void NauAddContentMenu::createVFX(const QString& path, const QString& name)
 
 void NauAddContentMenu::createMaterial(const QString& path)
 {
-    const std::filesystem::path templatesPath = Nau::Editor().currentProject()->assetTemplatesFolder().toUtf8().constData();
+    const std::filesystem::path templatesPath = Nau::Editor().currentProject()->assetTemplatesFolder().toStdWString();
     const std::filesystem::path materialTemplateDir = templatesPath / "material";
 
     std::vector<std::filesystem::path > templates;
@@ -122,16 +122,16 @@ void NauAddContentMenu::createMaterial(const QString& path)
     QLabel* templateLabel = new QLabel("Select template:");
     QComboBox* templateComboBox = new QComboBox();
     QStringList templateNames;
-    std::string templateLable = "Template";
+    const QString templateLabelText = "Template";
     
     for(const auto& temp : templates)
     {
-        auto templateName = temp.stem().string();
-        size_t pos = templateName.find(templateLable);
-        if (pos != std::string::npos)
+        auto templateName = QString::fromStdWString(temp.stem().wstring());
+        const auto pos = templateName.indexOf(templateLabelText);
+        if (pos != -1)
         {
-            templateName.erase(pos, templateLable.length());
-            templateNames.append(templateName.c_str());
+            templateName.remove(pos, templateLabelText.length());
+            templateNames.append(templateName);
         }
     }
     templateComboBox->addItems(templateNames);
@@ -169,15 +169,15 @@ void NauAddContentMenu::createMaterial(const QString& path)
 
 void NauAddContentMenu::createMaterialByTemplate(const QString& newMaterialName, const QString& path, const QString& name, const std::filesystem::path& materialTemplatePath)
 {
-    const std::filesystem::path templatesPath = Nau::Editor().currentProject()->assetTemplatesFolder().toUtf8().constData();
-    const std::filesystem::path newMaterialPath = NauFileOperations::generateFileNameIfExists(std::format("{}/{}.{}", path.toUtf8().constData(), newMaterialName.toUtf8().constData(), "nausd").c_str()).toUtf8().constData();
+    const QString newMaterialFileName = NauFileOperations::generateFileNameIfExists(path + "/" + newMaterialName + ".nausd");
+    const std::filesystem::path newMaterialPath = newMaterialFileName.toStdWString();
 
     std::filesystem::copy_file(materialTemplatePath, newMaterialPath);
 
-    QFile file(newMaterialPath.string().c_str());
+    QFile file(newMaterialFileName);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) 
     {
-        NED_ERROR("Could not open file {} for reading.", newMaterialPath.string());
+        NED_ERROR("Could not open file {} for reading.", newMaterialFileName.toStdString());
         return;
     }
 
@@ -186,14 +186,14 @@ void NauAddContentMenu::createMaterialByTemplate(const QString& newMaterialName,
     fileContent = in.readAll();
     file.close();
 
-    QString replacement = ("material_" + newMaterialPath.stem().string()).c_str();
+    QString replacement = "material_" + QString::fromStdWString(newMaterialPath.stem().wstring());
     replacement.replace("(", "_").replace(")", "");
     auto uid = "string uid = \"" + nau::toString(nau::Uid::generate()) + "\"";
     fileContent.replace(name, replacement).replace("string uid = \"\"", uid.c_str());
 
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
-        NED_ERROR("Could not open file {} for writing.", newMaterialPath.string());
+        NED_ERROR("Could not open file {} for writing.", newMaterialFileName.toStdString());
         return;
     }
 
