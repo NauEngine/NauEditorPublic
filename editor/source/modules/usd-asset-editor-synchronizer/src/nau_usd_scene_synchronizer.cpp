@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 #include "nau/nau_usd_scene_synchronizer.hpp"
+#include "nau_camera_visuals.hpp"
+#include "nau/io/virtual_file_system.h"
+#include "usd_translator/usd_component_adapter.h"
+#include "usd_proxy/usd_stage_watcher.h"
+#include <QCoreApplication>
 #include "nau/scene/scene_manager.h"
 #include "nau/scene/scene_factory.h"
 #include "nau/service/service_provider.h"
@@ -15,6 +20,9 @@
 #include "nau/prim-factory/nau_usd_prim_factory.hpp"
 
 #include "pxr/usd/usd/primRange.h"
+#include "pxr/base/gf/rotation.h"
+#include "pxr/usd/usdGeom/xformCache.h"
+#include "pxr/usd/usdGeom/xformable.h"
 #include "nau/assets/asset_manager.h"
 
 #include "nau_log.hpp"
@@ -22,6 +30,114 @@
 #include "nau/scene/components/billboard_component.h"
 #include "nau/scene/scene_factory.h"
 #include "magic_enum/magic_enum_containers.hpp"
+
+namespace
+{
+    const UsdTranslator::ComponentAdapter* componentAdapter(const UsdTranslator::IPrimAdapter& adapter)
+    {
+        // UsdTranslator is built without C++ RTTI. Its registered adapter type
+        // identifies the two ComponentAdapter implementations used by cameras.
+        const std::string_view type = adapter.getType();
+        return type == "NauComponent" || type == "NauSceneComponent" ? static_cast<const UsdTranslator::ComponentAdapter*>(&adapter) : nullptr;
+    }
+
+    template <typename TPredicate>
+    UsdTranslator::IPrimAdapter::Ptr findAdapter(UsdTranslator::IPrimAdapter::Ptr adapter, const TPredicate& matches)
+    {
+        if (!adapter || matches(adapter))
+        {
+            return adapter;
+        }
+        for (const auto& [name, child] : adapter->getChildren())
+        {
+            if (UsdTranslator::IPrimAdapter::Ptr found = findAdapter(child, matches))
+            {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
+    nau::math::Transform cameraTransformFromMatrix(const pxr::GfMatrix4d& matrix)
+    {
+        const pxr::GfVec3d translation = matrix.ExtractTranslation();
+        pxr::GfVec3d scale;
+        pxr::GfMatrix4d rotationMatrix(1.0);
+        int axisCount = 0;
+        int lastAxis = 0;
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            const pxr::GfVec3d row = matrix.GetRow3(axis);
+            scale[axis] = row.GetLength();
+            if (scale[axis] > 0.0)
+            {
+                rotationMatrix.SetRow3(axis, row / scale[axis]);
+                ++axisCount;
+                lastAxis = axis;
+            }
+        }
+
+        pxr::GfQuatd rotation(1.0);
+        if (axisCount >= 2)
+        {
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (scale[axis] == 0.0)
+                {
+                    rotationMatrix.SetRow3(axis, pxr::GfCross(rotationMatrix.GetRow3((axis + 1) % 3), rotationMatrix.GetRow3((axis + 2) % 3)).GetNormalized());
+                }
+            }
+            if (rotationMatrix.GetDeterminant3() < 0.0)
+            {
+                rotationMatrix.SetRow3(0, -rotationMatrix.GetRow3(0));
+                scale[0] = -scale[0];
+            }
+            rotationMatrix.Orthonormalize(false);
+            rotation = rotationMatrix.ExtractRotationQuat().GetNormalized();
+        }
+        else if (axisCount == 1)
+        {
+            rotation = pxr::GfRotation(pxr::GfVec3d::Axis(lastAxis), rotationMatrix.GetRow3(lastAxis)).GetQuat();
+        }
+
+        const pxr::GfVec3d imaginary = rotation.GetImaginary();
+        return nau::math::Transform(
+            {static_cast<float>(imaginary[0]), static_cast<float>(imaginary[1]), static_cast<float>(imaginary[2]), static_cast<float>(rotation.GetReal())},
+            {static_cast<float>(translation[0]), static_cast<float>(translation[1]), static_cast<float>(translation[2])},
+            {static_cast<float>(scale[0]), static_cast<float>(scale[1]), static_cast<float>(scale[2])});
+    }
+
+    nau::math::Transform cameraWorldTransform(const UsdTranslator::IPrimAdapter::Ptr& rootAdapter, const nau::scene::CameraComponent& camera)
+    {
+        const UsdTranslator::IPrimAdapter::Ptr adapter = findAdapter(rootAdapter, [&camera](const UsdTranslator::IPrimAdapter::Ptr& candidate)
+        {
+            const UsdTranslator::ComponentAdapter* adapter = componentAdapter(*candidate);
+            return adapter && adapter->getComponent().get() == &camera;
+        });
+        if (!adapter || !adapter->getPrim())
+        {
+            return camera.getWorldTransform();
+        }
+        pxr::UsdGeomXformCache cache;
+        return cameraTransformFromMatrix(cache.GetLocalToWorldTransform(adapter->getPrim()));
+    }
+
+    bool cameraTransformsChanged(const pxr::UsdNotice::ObjectsChanged& notice)
+    {
+        if (!notice.GetResyncedPaths().empty())
+        {
+            return true;
+        }
+        for (const pxr::SdfPath& path : notice.GetChangedInfoOnlyPaths())
+        {
+            if (path.IsPropertyPath() && pxr::UsdGeomXformable::IsTransformationAffectedByAttrNamed(path.GetNameToken()))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+}
 
 // ** NauEngineSceneListener
 
@@ -159,7 +275,6 @@ NauUsdSceneSynchronizer::NauUsdSceneSynchronizer()
     m_billboardIcons[BillboardTypes::SphereLight] = "file:/res/Images/billbords/Banner_Light_Bulb.png";
     m_billboardIcons[BillboardTypes::DirectionalLightComponent] = "file:/res/Images/billbords/Banner_Light_Direct.png";
     m_billboardIcons[BillboardTypes::VFXInstance] = "file:/res/Images/billbords/Banner_VFX.png";
-    m_billboardIcons[BillboardTypes::CameraComponent] = "file:/res/Images/billbords/Banner_Camera.png";
     m_billboardIcons[BillboardTypes::AudioComponentEmitter] = "file:/res/Images/billbords/Banner_Sound_Emitter.png";
     m_billboardIcons[BillboardTypes::AudioComponentListener] = "file:/res/Images/billbords/Banner_Sound_Listener.png";
     m_billboardIcons[BillboardTypes::AudioEmitter] = "file:/res/Images/billbords/Banner_Sound_Emitter.png";
@@ -219,14 +334,44 @@ void NauUsdSceneSynchronizer::startSyncFromEditorSceneInternal(pxr::UsdStageRefP
 
         auto& sceneManager = nau::getServiceProvider().get<nau::scene::ISceneManager>();
         m_engineCurrentScene = co_await sceneManager.getDefaultWorld().addScene(std::move(newEngineScene));
+        // Mount only camera resources, once per VFS lifetime: unmount is not implemented
+        nau::io::IVirtualFileSystem& fileSystem = nau::getServiceProvider().get<nau::io::IVirtualFileSystem>();
+        if (!fileSystem.exists("/editor_camera", nau::io::FsEntryKind::Directory))
+        {
+            const QString meshDirectory = QCoreApplication::applicationDirPath() + "/editor_resources/meshes";
+            co_await fileSystem.mount("/editor_camera", nau::io::createNativeFileSystem(meshDirectory.toUtf8().toStdString()));
+        }
+        m_cameraVisuals = eastl::make_unique<nau::editor::CameraVisuals>(*m_engineCurrentScene, [this](const nau::scene::CameraComponent& camera)
+        {
+            return cameraWorldTransform(m_sceneTranslator->getRootAdapter(), camera);
+        });
+        co_await m_cameraVisuals->activate();
+        m_cameraTransformWatcher = std::make_unique<UsdProxy::StageObjectChangedWatcher>(m_editorCurrentScene, [this](const pxr::UsdNotice::ObjectsChanged& notice)
+        {
+            if (cameraTransformsChanged(notice))
+            {
+                m_cameraVisuals->updateTransforms();
+            }
+        });
     };
 
     Nau::EditorEngine().runTaskSync(sceneCreateTask().detach());
     m_syncMode = SyncMode::FromEditor;
 }
 
+void NauUsdSceneSynchronizer::stopCameraVisuals()
+{
+    m_cameraTransformWatcher.reset();
+    if (m_cameraVisuals)
+    {
+        Nau::EditorEngine().runTaskSync(m_cameraVisuals->shutdown().detach());
+        m_cameraVisuals.reset();
+    }
+}
+
 void NauUsdSceneSynchronizer::stopSyncFromEditorSceneInternal()
 {
+    stopCameraVisuals();
     if (!m_engineCurrentScene) {
         return;
     }
@@ -301,6 +446,65 @@ void NauUsdSceneSynchronizer::stopSyncFromEngineSceneInternal()
 UsdTranslator::StageTranslator* NauUsdSceneSynchronizer::translator() const
 {
     return m_sceneTranslator.get();
+}
+
+pxr::SdfPath NauUsdSceneSynchronizer::primFromCameraMesh(const nau::Uid& uid) const
+{
+    if (!m_cameraVisuals || !m_sceneTranslator)
+    {
+        return {};
+    }
+    const nau::Uid cameraUid = m_cameraVisuals->cameraUidForMesh(uid);
+    if (!cameraUid)
+    {
+        return {};
+    }
+    const UsdTranslator::IPrimAdapter::Ptr adapter = findAdapter(m_sceneTranslator->getRootAdapter(), [&cameraUid](const UsdTranslator::IPrimAdapter::Ptr& candidate)
+    {
+        const UsdTranslator::ComponentAdapter* adapter = componentAdapter(*candidate);
+        return adapter && adapter->getComponent()
+            && adapter->getComponent()->getUid() == cameraUid;
+    });
+    return adapter ? adapter->getPrimPath() : pxr::SdfPath{};
+}
+
+std::vector<nau::Uid> NauUsdSceneSynchronizer::cameraMeshUidsForPrim(const pxr::SdfPath& path) const
+{
+    std::vector<nau::Uid> result;
+    if (!m_cameraVisuals || !m_sceneTranslator)
+    {
+        return result;
+    }
+    const UsdTranslator::IPrimAdapter::Ptr adapter = findAdapter(m_sceneTranslator->getRootAdapter(), [&path](const UsdTranslator::IPrimAdapter::Ptr& candidate)
+    {
+        return candidate->getPrimPath() == path;
+    });
+    if (!adapter)
+    {
+        return result;
+    }
+    if (const UsdTranslator::ComponentAdapter* cameraAdapter = componentAdapter(*adapter))
+    {
+        if (nau::scene::ObjectWeakRef<nau::scene::Component> component = cameraAdapter->getComponent(); component && component->is<nau::scene::CameraComponent>())
+        {
+            if (nau::Uid uid = m_cameraVisuals->meshUidForCamera(component->getUid()))
+            {
+                result.push_back(uid);
+            }
+            return result;
+        }
+    }
+    if (nau::scene::SceneObject::WeakRef object = adapter->getSceneObject())
+    {
+        for (const nau::scene::Component* camera : object->getDirectComponents<nau::scene::CameraComponent>())
+        {
+            if (nau::Uid uid = m_cameraVisuals->meshUidForCamera(camera->getUid()))
+            {
+                result.push_back(uid);
+            }
+        }
+    }
+    return result;
 }
 
 nau::scene::SceneObject::WeakRef NauUsdSceneSynchronizer::sceneObjectByPrimPath(const pxr::SdfPath& path) const
