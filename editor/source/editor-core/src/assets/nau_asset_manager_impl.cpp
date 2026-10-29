@@ -163,7 +163,10 @@ void NauAssetManager::onAssetChanged(const std::string& assetPath)
 
 void NauAssetManager::assetAdded(const std::string& assetPath)
 {
-    ensureUniqueUid(assetPath);
+    if (!ensureUniqueUid(assetPath)) {
+        NED_ERROR("Failed to ensure unique uid for {}, import aborted", assetPath);
+        return;
+    }
 
     m_assetProcessor->importAsset(m_projectPath, assetPath);
 
@@ -207,14 +210,11 @@ bool NauAssetManager::ensureUniqueUid(const std::string& assetPath)
             return false;
         }
 
-        pxr::UsdPrim assetPrim = stage->GetPrimAtPath(pxr::SdfPath("/Root"));
-        if (!assetPrim) {
-            const auto children = stage->GetPseudoRoot().GetAllChildren();
-            if (children.empty()) {
-                return false;
-            }
-            assetPrim = children.front();
+        const auto children = stage->GetPseudoRoot().GetAllChildren();
+        if (children.empty()) {
+            return false;
         }
+        pxr::UsdPrim assetPrim = children.front();
 
         const pxr::TfToken uidToken("uid");
         pxr::UsdAttribute uidAttr = assetPrim.GetAttribute(uidToken);
@@ -260,7 +260,7 @@ bool NauAssetManager::ensureUniqueUid(const std::string& assetPath)
         }
 
         // Renderer batches instances by material name, so a copy with the original prim name is drawn with the original material
-        if (assetPrim.GetTypeName() == pxr::TfToken("NauAssetMaterial")) {
+        if (typeResolver()->resolve(assetPath.c_str()).type == NauEditorFileType::Material) {
             // Same naming as for a newly created material, plus a uid suffix: a copied folder has the same file names
             std::string stem = std::filesystem::path(assetPath).stem().string();
             std::replace(stem.begin(), stem.end(), '(', '_');
@@ -282,10 +282,10 @@ bool NauAssetManager::ensureUniqueUid(const std::string& assetPath)
         return true;
 
     } catch (const std::exception &e) {
-        NED_ERROR("Exception occured while ensuring unique uid for {}: {}", assetPath, e.what());
+        NED_ERROR("Exception occurred while ensuring unique uid for {}: {}", assetPath, e.what());
         return false;
     } catch (...) {
-        NED_ERROR("Unknown exception occured while ensuring unique uid for {}", assetPath);
+        NED_ERROR("Unknown exception occurred while ensuring unique uid for {}", assetPath);
         return false;
     }
 }
