@@ -4,6 +4,7 @@
 #include "nau/inspector/nau_usd_inspector_client.hpp"
 #include "nau/inspector/nau_usd_property_factory.hpp"
 #include "nau/utils/nau_usd_editor_utils.hpp"
+#include "nau_log.hpp"
 
 
 #include "pxr/usd/usdGeom/tokens.h"
@@ -276,9 +277,15 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
                     uidStr = newAssetPath.substr(4);
                 }
 
-                auto uid = nau::Uid::parseString(uidStr);
+                // Uid cant be parsed if referenced asset is missing
+                // Then the property widget is still created, but empty
+                const auto uid = nau::Uid::parseString(uidStr);
+                const eastl::string nausdPath = uid ? assetDb.getNausdPathFromUid(*uid) : eastl::string{};
+                if (!uid) {
+                    NED_WARNING("Unable to resolve referenced asset {}", sdfRef.GetAssetPath());
+                }
 
-                sourcePath = nau::FileSystemExtensions::resolveToNativePathContentFolder(assetDb.getNausdPathFromUid(*uid).c_str());
+                sourcePath = nau::FileSystemExtensions::resolveToNativePathContentFolder(nausdPath.c_str());
             }
 
             auto m_assetType = assetManager->typeResolver()->resolve(sourcePath.c_str()).type;
