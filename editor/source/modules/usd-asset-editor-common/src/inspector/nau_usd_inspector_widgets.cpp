@@ -15,6 +15,7 @@
 #include "pxr/base/gf/rotation.h"
 #include "pxr/base/gf/matrix3d.h"
 
+#include <QFileInfo>
 #include <QMatrix3x3>
 #include <QGenericMatrix>
 
@@ -867,6 +868,10 @@ void NauInspectorUSDResourceComboBox::updateItems()
             switch (m_viewType) {
 
             case ShowTypes::ShowFileNameMode:
+                // Asset database is not cleaned up when an asset is deleted, so skip missing ones
+                if (!QFileInfo::exists(QString::fromStdString(nau::FileSystemExtensions::resolveToNativePathContentFolder(assetMetaInfo.nausdPath.c_str())))) {
+                    break;
+                }
                 addItem(QString(assetMetaInfo.sourcePath.c_str()), assetMetaInfo.uid, "/Asset", assetType);
                 break;
             case ShowTypes::ShowPrimNameMode: {
