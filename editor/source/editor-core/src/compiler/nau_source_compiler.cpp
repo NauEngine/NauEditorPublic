@@ -297,16 +297,25 @@ bool NauWinDllCompilerCpp::checkCmakeInPath(const NauProject& project, std::vect
 
 }
 
-bool NauWinDllCompilerCpp::buildProject(const NauSourceCompiler::NauBuildSettings& buildSettings, const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled)
+bool NauWinDllCompilerCpp::buildProject(const NauSourceCompiler::NauBuildSettings& buildSettings, const QString& projectRootDir, const QString& buildTool, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled)
 {
     stageSink(tr("Building project scripts"));
 
     NauSourceCompilerConfig config;
-    getConfig(project, config, project.dir().absoluteFilePath("log_buildproject.txt"));
+    config.appDir = qApp->applicationDirPath();
+    config.env = QProcessEnvironment::systemEnvironment();
+    config.env.insert(QStringLiteral("NAU_ENGINE_SDK_DIR"), config.appDir.absoluteFilePath("NauEngineSDK"));
+    config.projectRootDir = projectRootDir;
+    config.buildTool = buildTool;
+    config.logFile.setFileName(QDir(projectRootDir).absoluteFilePath("log_buildproject.txt"));
 
     FileWrite log(config.logFile);
     QByteArrayList logStringsRaw;
     bool result = false;
+    if (isCancelled && isCancelled()) {
+        config.logFile.write("Build cancelled before starting\r\n");
+        return false;
+    }
     QStringList args = {
         "build",
         "--project", config.projectRootDir,

@@ -11,6 +11,9 @@
 #include "nau_buttons.hpp"
 #include "project/nau_project.hpp"
 #include "nau_log.hpp"
+#include <optional>
+
+class QThread;
 
 
 // ** NauBuildStartupDailog
@@ -35,6 +38,7 @@ class NauBuildStartupDailog : public NauDialog
 
 public:
     NauBuildStartupDailog(const NauProject& project, NauMainWindow* parent);
+    ~NauBuildStartupDailog() override;
 
     void done(int result) override;
 
@@ -53,8 +57,9 @@ private:
     QString getDefaultBuildDirectory();
 
 private:
-    std::unique_ptr<NauProcess> m_buildProcess;
     std::shared_ptr<std::atomic_bool> m_cancelBuildFlag;
+    QThread* m_buildThread = nullptr;
+    std::optional<int> m_closeResult;
     NauDir m_buildDir;
     QString m_buildToolPath;
     BuildState m_currentBuildState;

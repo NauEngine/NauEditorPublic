@@ -462,6 +462,7 @@ void NauEditor::openBuildWindow()
     auto* buildDialog = new NauBuildStartupDailog(*m_project, m_mainWindow.get());
     buildDialog->setAttribute(Qt::WA_DeleteOnClose);
     buildDialog->open();
+    m_mainWindow->logger()->switchTab(m_launchLoggerName);
 }
 
 void NauEditor::showCommandHistory(const NauToolButton& button)

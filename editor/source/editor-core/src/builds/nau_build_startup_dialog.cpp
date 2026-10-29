@@ -10,7 +10,6 @@
 #include <QDesktopServices>
 #include <QCloseEvent>
 #include <QThread>
-#include <QPointer>
 #include <QUrl>
 #include <utility>
 
@@ -168,9 +167,21 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     }
 }
 
+NauBuildStartupDailog::~NauBuildStartupDailog()
+{
+    // The worker owns only snapshots and can finish without GUI event delivery.
+    if (m_buildThread) {
+        m_cancelBuildFlag->store(true);
+        m_buildThread->wait();
+        delete m_buildThread;
+    }
+}
+
 void NauBuildStartupDailog::done(int result)
 {
-    if (m_currentBuildState == BuildState::Building) {
+    if (m_buildThread) {
+        m_closeResult = result;
+        cancelBuild();
         return;
     }
 
@@ -179,7 +190,8 @@ void NauBuildStartupDailog::done(int result)
 
 void NauBuildStartupDailog::closeEvent(QCloseEvent* event)
 {
-    if (m_currentBuildState == BuildState::Building) {
+    if (m_buildThread) {
+        done(QDialog::Rejected);
         event->ignore();
         return;
     }
@@ -266,57 +278,54 @@ void NauBuildStartupDailog::runBuild()
 
     setBuildState(BuildState::Building);
 
-    auto* buildThread = QThread::create([this, settings, cancelFlag] {
-        NauWinDllCompilerCpp compiler;
+    const QString projectRootDir = m_project.dir().absolutePath();
+    const QString buildTool = m_buildToolPath;
+    struct BuildResult
+    {
+        bool success = false;
         std::vector<std::string> logStrings;
+    };
+    auto result = std::make_shared<BuildResult>();
 
-        const bool success = compiler.buildProject(
-            settings,
-            m_project,
-            logStrings,
+    m_buildThread = QThread::create([settings, projectRootDir, buildTool, cancelFlag, result] {
+        NauWinDllCompilerCpp compiler;
+        result->success = compiler.buildProject(
+            settings, projectRootDir, buildTool, result->logStrings,
             [](const QString&) {},
-            [cancelFlag] {
-                return cancelFlag->load();
-            }
-        );
+            [cancelFlag] { return cancelFlag->load(); });
+    });
+    m_buildThread->setParent(this);
 
-        QPointer<NauBuildStartupDailog> guard(this);
+    connect(m_buildThread, &QThread::finished, this, [this, result, cancelFlag] {
+        // finished may precede thread-local cleanup; join before destruction.
+        m_buildThread->wait();
+        delete std::exchange(m_buildThread, nullptr);
+        m_cancelBuildFlag.reset();
 
-        QMetaObject::invokeMethod(
-            this,
-            [guard, success, logStrings = std::move(logStrings), cancelFlag] {
-                if (!guard) {
-                    return;
-                }
+        if (m_closeResult) {
+            const int closeResult = *m_closeResult;
+            m_closeResult.reset();
+            NauDialog::done(closeResult);
+            return;
+        }
 
-                if (cancelFlag->load()) {
-                    guard->m_cancelBuildFlag.reset();
-                    guard->setBuildState(BuildState::None);
-                    guard->m_buildStatusLabel->setText(tr("Build cancelled"));
-                    return;
-                }
-
-                for (const auto& str : logStrings) {
-                    NED_BUILD_CRITICAL(str);
-                }
-
-                if (success) {
-                    NED_BUILD_INFO("Build project success");
-                    guard->setBuildState(BuildState::Ready);
-                }
-                else {
-                    NED_BUILD_CRITICAL("Build project failed!");
-                    guard->setBuildState(BuildState::Failed);
-                }
-
-                guard->m_cancelBuildFlag.reset();
-            },
-            Qt::QueuedConnection
-        );
-        });
-
-    connect(buildThread, &QThread::finished, buildThread, &QThread::deleteLater);
-    buildThread->start();
+        if (cancelFlag->load()) {
+            setBuildState(BuildState::None);
+            m_buildStatusLabel->setText(tr("Build cancelled"));
+            return;
+        }
+        for (const auto& str : result->logStrings) {
+            NED_BUILD_CRITICAL(str);
+        }
+        if (result->success) {
+            NED_BUILD_INFO("Build project success");
+            setBuildState(BuildState::Ready);
+        } else {
+            NED_BUILD_CRITICAL("Build project failed!");
+            setBuildState(BuildState::Failed);
+        }
+    }, Qt::QueuedConnection);
+    m_buildThread->start();
 }
 
 void NauBuildStartupDailog::cancelBuild()
@@ -326,6 +335,8 @@ void NauBuildStartupDailog::cancelBuild()
     }
 
     m_cancelBuildFlag->store(true);
+    m_buildButton->setEnabled(false);
+    m_buildStatusLabel->setText(tr("Cancelling build..."));
 }
 
 void NauBuildStartupDailog::setBuildDirectory(const QString& directory)
