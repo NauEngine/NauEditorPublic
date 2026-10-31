@@ -7,6 +7,11 @@
 #include "nau_plus_enum.hpp"
 
 #include "QFileDialog"
+#include <QDesktopServices>
+#include <QCloseEvent>
+#include <QThread>
+#include <QUrl>
+#include <utility>
 
 
 // Build logger macro
@@ -21,6 +26,7 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     : NauDialog(parent)
     , m_buildToolPath(project.buildToolPath())
     , m_project(project)
+    , m_currentBuildState(BuildState::None)
 {
     setWindowTitle(tr("Application build"));
     setMinimumSize(560, 480);
@@ -66,7 +72,6 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     m_buildDirLabel->setWordWrap(true);
 
     auto chooseDirButton = new NauToolButton();
-    
     const auto buildDirectory = getDefaultBuildDirectory();
     chooseDirButton->setText(buildDirectory);
     setBuildDirectory(buildDirectory);
@@ -83,7 +88,6 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     buildDirChooseLayout->addWidget(chooseDirButton);
 
     buildDirLayout->addLayout(buildDirChooseLayout);
-    
     // Build settings layout
     auto platformAndConfigLayout = new NauLayoutHorizontal();
     platformAndConfigLayout->addLayout(platformLayout);
@@ -107,21 +111,35 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     m_buildButton->setText(tr("Build App"));
     m_buildButton->setIcon(Nau::Theme::current().iconPreferences());
     m_buildButton->setFixedHeight(NauAbstractButton::standardHeight());
+    m_buildButton->setFixedWidth(160);
     connect(m_buildButton, &NauAbstractButton::clicked, this, &NauBuildStartupDailog::runBuild);
 
-    m_cancelBuildButton = new NauPrimaryButton();
-    m_cancelBuildButton->setText(tr("Cancel"));
-    m_cancelBuildButton->setIcon(Nau::Theme::current().iconClose());
-    m_cancelBuildButton->setFixedHeight(NauAbstractButton::standardHeight());
-    m_cancelBuildButton->setEnabled(false);
-    connect(m_cancelBuildButton, &NauAbstractButton::clicked, this, &NauBuildStartupDailog::cancelBuild);
+    m_openBuildButton = new NauPrimaryButton();
+    m_openBuildButton->setText(tr("Open build folder"));
+    m_openBuildButton->setFixedHeight(NauAbstractButton::standardHeight());
+    m_openBuildButton->setFixedWidth(160);
+    m_openBuildButton->setVisible(true);
+    m_openBuildButton->setEnabled(false);
+    connect(m_openBuildButton, &NauAbstractButton::clicked, this, [this] {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(m_buildDir.absolutePath()));
+        });
 
     m_buildStatusLabel = new NauLabel();
+    m_buildStatusLabel->setMinimumWidth(180);
 
+    m_buildProgressBar = new NauProgressBar(this);
+    m_buildProgressBar->setRange(0, 0);
+    m_buildProgressBar->setTextVisible(false);
+    m_buildProgressBar->setFixedHeight(8);
+    m_buildProgressBar->hide();
+
+    // Bottom buttons row: [status] <stretch> [open] [gap] [build]
     auto buildButtonsLayout = new NauLayoutHorizontal();
-    buildButtonsLayout->addWidget(m_buildStatusLabel, Qt::AlignLeft);
+    buildButtonsLayout->setSpacing(0);
+    buildButtonsLayout->addWidget(m_buildStatusLabel, Qt::AlignLeft | Qt::AlignVCenter);
     buildButtonsLayout->addStretch(1);
-    buildButtonsLayout->addWidget(m_cancelBuildButton, Qt::AlignRight);
+    buildButtonsLayout->addWidget(m_openBuildButton, Qt::AlignRight);
+    buildButtonsLayout->addSpacing(LayoutSpacing);
     buildButtonsLayout->addWidget(m_buildButton, Qt::AlignRight);
 
     // Fill main layout
@@ -135,6 +153,7 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     mainLayout->addLayout(buildDirLayout);
     mainLayout->addLayout(postBuildActionLayout);
     mainLayout->addStretch(1);
+    mainLayout->addWidget(m_buildProgressBar);
     mainLayout->addLayout(buildButtonsLayout);
 
     fillSettings();
@@ -142,35 +161,79 @@ NauBuildStartupDailog::NauBuildStartupDailog(const NauProject& project, NauMainW
     if (!m_project.isSourcesCompiled()) {
         m_buildStatusLabel->setText(tr("<img src=\":/UI/icons/compilation/warning-tri-yellow.svg\">Unable to publish this project for its sources out of a date.<br/>"
             "To recompile the sources, please restart the editor"));
-        
+
         m_buildButton->setEnabled(false);
         m_buildButton->setToolTip(m_buildStatusLabel->text());
     }
 }
 
-void NauBuildStartupDailog::setBuildState(BuildState state)
+NauBuildStartupDailog::~NauBuildStartupDailog()
 {
-    if (m_currentBuildState == state) {
+    // The worker owns only snapshots and can finish without GUI event delivery.
+    if (m_buildThread) {
+        m_cancelBuildFlag->store(true);
+        m_buildThread->wait();
+        delete m_buildThread;
+    }
+}
+
+void NauBuildStartupDailog::done(int result)
+{
+    if (m_buildThread) {
+        m_closeResult = result;
+        cancelBuild();
         return;
     }
 
-    if (state == BuildState::Building) {
-        m_buildButton->setEnabled(false);
-        m_cancelBuildButton->setEnabled(true);
-        m_buildStatusLabel->setText(tr("Building..."));
-    } else {
-        m_buildButton->setEnabled(true);
-        m_cancelBuildButton->setEnabled(false);
-        m_buildStatusLabel->clear();   
+    NauDialog::done(result);
+}
+
+void NauBuildStartupDailog::closeEvent(QCloseEvent* event)
+{
+    if (m_buildThread) {
+        done(QDialog::Rejected);
+        event->ignore();
+        return;
     }
 
-    if (state == BuildState::Ready) {
-        m_buildStatusLabel->setText(tr("Build finished successfully"));
-    } else if (state == BuildState::Failed) {
-        m_buildStatusLabel->setText(tr("Build failed"));
-    }
+    NauDialog::closeEvent(event);
+}
 
+void NauBuildStartupDailog::setBuildState(BuildState state)
+{
     m_currentBuildState = state;
+
+    const bool building = state == BuildState::Building;
+    const bool ready = state == BuildState::Ready;
+
+    m_buildButton->setEnabled(true);
+    m_buildButton->setText(building ? tr("Cancel") : tr("Build App"));
+    m_buildButton->setIcon(building
+        ? Nau::Theme::current().iconClose()
+        : Nau::Theme::current().iconPreferences());
+
+    m_buildProgressBar->setVisible(building);
+
+    m_openBuildButton->setEnabled(ready);
+
+    switch (state) {
+    case BuildState::Building:
+        m_buildStatusLabel->setText(tr("Building..."));
+        break;
+
+    case BuildState::Ready:
+        m_buildStatusLabel->setText(tr("Build finished successfully"));
+        break;
+
+    case BuildState::Failed:
+        m_buildStatusLabel->setText(tr("Build failed. See Console for details"));
+        break;
+
+    case BuildState::None:
+    default:
+        m_buildStatusLabel->clear();
+        break;
+    }
 }
 
 QString NauBuildStartupDailog::getDefaultBuildDirectory()
@@ -183,56 +246,97 @@ void NauBuildStartupDailog::fillSettings()
     // TODO: Get build settings from engine
 
     m_platforms->addItems({ "Windows desktop" });
-    m_architecture->addItems({ "win_vs2022_x64_dll", "win_vs2022_x64"});
+    m_architecture->addItems({ "win_vs2022_x64_dll", "win_vs2022_x64" });
 #ifdef QT_NO_DEBUG
     m_configuration->addItems({ "Release" , "Debug" });
 #else
-    m_configuration->addItems({ "Debug", "Release"});
+    m_configuration->addItems({ "Debug", "Release" });
 #endif  // QT_NO_DEBUG
     m_compression->addItems({ "None" });
 
     m_postBuildAction->addItem(tr("None"), +AfterBuildAction::None);
     m_postBuildAction->addItem(tr("Open After Build"), +AfterBuildAction::OpenDirectory);
-    m_postBuildAction->setCurrentIndex(m_postBuildAction->findData(+AfterBuildAction::OpenDirectory));
+    m_postBuildAction->setCurrentIndex(m_postBuildAction->findData(+AfterBuildAction::None));
 }
 
 void NauBuildStartupDailog::runBuild()
 {
     if (m_currentBuildState == BuildState::Building) {
-        NED_DEBUG("Command to build requested while the build-process is proceeding.");
+        cancelBuild();
         return;
     }
 
-    NauWinDllCompilerCpp compiler;
-    std::vector<std::string> logStrings;
     NauSourceCompiler::NauBuildSettings settings;
     settings.configName = m_configuration->currentText();
     settings.preset = m_architecture->currentText();
     settings.targetDir = NauDir::toNativeSeparators(m_buildDir.absolutePath());
-    settings.openAfterBuild = m_postBuildAction->currentData().toInt() == +AfterBuildAction::OpenDirectory;
+    settings.openAfterBuild =
+        m_postBuildAction->currentData().toInt() == +AfterBuildAction::OpenDirectory;
 
-    if(compiler.buildProject(settings, m_project, logStrings, [](const QString& msg) {})) {
-        NED_BUILD_INFO("Build project success");
-        if (logStrings.size() > 0) {
-            NED_BUILD_CRITICAL("But with errors!");
+    auto cancelFlag = std::make_shared<std::atomic_bool>(false);
+    m_cancelBuildFlag = cancelFlag;
+
+    setBuildState(BuildState::Building);
+
+    const QString projectRootDir = m_project.dir().absolutePath();
+    const QString buildTool = m_buildToolPath;
+    struct BuildResult
+    {
+        bool success = false;
+        std::vector<std::string> logStrings;
+    };
+    auto result = std::make_shared<BuildResult>();
+
+    m_buildThread = QThread::create([settings, projectRootDir, buildTool, cancelFlag, result] {
+        NauWinDllCompilerCpp compiler;
+        result->success = compiler.buildProject(
+            settings, projectRootDir, buildTool, result->logStrings,
+            [](const QString&) {},
+            [cancelFlag] { return cancelFlag->load(); });
+    });
+    m_buildThread->setParent(this);
+
+    connect(m_buildThread, &QThread::finished, this, [this, result, cancelFlag] {
+        // finished may precede thread-local cleanup; join before destruction.
+        m_buildThread->wait();
+        delete std::exchange(m_buildThread, nullptr);
+        m_cancelBuildFlag.reset();
+
+        if (m_closeResult) {
+            const int closeResult = *m_closeResult;
+            m_closeResult.reset();
+            NauDialog::done(closeResult);
+            return;
         }
-    } else {
-        NED_BUILD_CRITICAL("Build project failed!");
-    }
-    for (auto& str : logStrings) {
-        NED_BUILD_CRITICAL(str);
-    }
+
+        if (cancelFlag->load()) {
+            setBuildState(BuildState::None);
+            m_buildStatusLabel->setText(tr("Build cancelled"));
+            return;
+        }
+        for (const auto& str : result->logStrings) {
+            NED_BUILD_CRITICAL(str);
+        }
+        if (result->success) {
+            NED_BUILD_INFO("Build project success");
+            setBuildState(BuildState::Ready);
+        } else {
+            NED_BUILD_CRITICAL("Build project failed!");
+            setBuildState(BuildState::Failed);
+        }
+    }, Qt::QueuedConnection);
+    m_buildThread->start();
 }
 
 void NauBuildStartupDailog::cancelBuild()
 {
-    if (m_currentBuildState != BuildState::Building) {
-        NED_DEBUG("Command to cancel build requested while the build-process is not proceeding.");
+    if (m_currentBuildState != BuildState::Building || !m_cancelBuildFlag) {
         return;
     }
 
-    m_buildProcess->kill();
-    setBuildState(BuildState::None);
+    m_cancelBuildFlag->store(true);
+    m_buildButton->setEnabled(false);
+    m_buildStatusLabel->setText(tr("Cancelling build..."));
 }
 
 void NauBuildStartupDailog::setBuildDirectory(const QString& directory)
