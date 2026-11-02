@@ -48,6 +48,7 @@ protected:
 private:
     void runBuild();
     void cancelBuild();
+    void updateBuildProgress(const QString& stage, qint64 completed, qint64 total, const QString& unit, const QString& file);
     void setBuildDirectory(const QString& directory);
 
     void fillSettings();

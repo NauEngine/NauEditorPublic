@@ -10,6 +10,7 @@
 #include <QDesktopServices>
 #include <QCloseEvent>
 #include <QThread>
+#include <QPointer>
 #include <QUrl>
 #include <utility>
 
@@ -213,6 +214,11 @@ void NauBuildStartupDailog::setBuildState(BuildState state)
         : Nau::Theme::current().iconPreferences());
 
     m_buildProgressBar->setVisible(building);
+    if (building) {
+        // Older BuildTool versions emit no events: keep a truthful busy indicator.
+        m_buildProgressBar->setRange(0, 0);
+        m_buildStatusLabel->setToolTip({});
+    }
 
     m_openBuildButton->setEnabled(ready);
 
@@ -287,12 +293,20 @@ void NauBuildStartupDailog::runBuild()
     };
     auto result = std::make_shared<BuildResult>();
 
-    m_buildThread = QThread::create([settings, projectRootDir, buildTool, cancelFlag, result] {
+    const QPointer<NauBuildStartupDailog> guard(this);
+    auto progressSink = [guard, cancelFlag](const NauSourceCompiler::NauBuildProgress& progress) {
+        if (!guard || cancelFlag->load()) return;
+        QMetaObject::invokeMethod(guard.data(), [guard, cancelFlag, progress] {
+            if (!guard || cancelFlag->load() || !guard->m_buildThread) return;
+            guard->updateBuildProgress(progress.stage, progress.completed, progress.total, progress.unit, progress.file);
+        }, Qt::QueuedConnection);
+    };
+    m_buildThread = QThread::create([settings, projectRootDir, buildTool, cancelFlag, result, progressSink] {
         NauWinDllCompilerCpp compiler;
         result->success = compiler.buildProject(
             settings, projectRootDir, buildTool, result->logStrings,
             [](const QString&) {},
-            [cancelFlag] { return cancelFlag->load(); });
+            [cancelFlag] { return cancelFlag->load(); }, progressSink);
     });
     m_buildThread->setParent(this);
 
@@ -326,6 +340,39 @@ void NauBuildStartupDailog::runBuild()
         }
     }, Qt::QueuedConnection);
     m_buildThread->start();
+}
+
+void NauBuildStartupDailog::updateBuildProgress(const QString& stage, qint64 completed, qint64 total,
+    const QString& unit, const QString& file)
+{
+    QString label;
+    if (stage == "prepare") label = tr("Preparing build");
+    else if (stage == "configure") label = tr("Configuring project");
+    else if (stage == "compile-sources") label = tr("Compiling sources");
+    else if (stage == "compile-assets") label = tr("Compiling assets");
+    else if (stage == "copy-binaries") label = tr("Copying binaries");
+    else if (stage == "package-assets") label = tr("Packing assets");
+    else if (stage == "write-package") label = tr("Writing package");
+    else if (stage == "copy-resources") label = tr("Copying resources");
+    else if (stage == "copy-config") label = tr("Copying configuration");
+    else if (stage == "finalize") label = tr("Finishing build");
+    else return;
+
+    if (total < 0) {
+        m_buildProgressBar->setRange(0, 0);
+    } else {
+        const int percent = total == 0 ? 100 : static_cast<int>(100.0 * completed / total);
+        m_buildProgressBar->setRange(0, 100);
+        m_buildProgressBar->setValue(percent);
+        if (unit == "bytes") {
+            label += tr(" — %1/%2 MiB (%3%)").arg(completed / 1048576.0, 0, 'f', 1)
+                .arg(total / 1048576.0, 0, 'f', 1).arg(percent);
+        } else {
+            label += tr(" — %1/%2 files (%3%)").arg(completed).arg(total).arg(percent);
+        }
+    }
+    m_buildStatusLabel->setText(label);
+    m_buildStatusLabel->setToolTip(file);
 }
 
 void NauBuildStartupDailog::cancelBuild()
