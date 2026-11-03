@@ -15,6 +15,8 @@
 #include <EASTL/unique_ptr.h>
 #include <vector>
 
+class QObject;
+
 namespace nau::editor
 {
     class CameraVisuals;
@@ -114,6 +116,7 @@ private:
     std::shared_ptr<UsdTranslator::StageTranslator> m_sceneTranslator;
     eastl::unique_ptr<nau::editor::CameraVisuals> m_cameraVisuals;
     std::unique_ptr<UsdProxy::StageObjectChangedWatcher> m_cameraTransformWatcher;
+    std::unique_ptr<QObject> m_billboardTimerContext;
     pxr::SdfPath m_previewSelection;
 
     std::shared_ptr<NauEngineSceneListener> m_sceneListener;

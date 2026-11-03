@@ -37,6 +37,7 @@ ENDIF()
 set(Sources
     nau_main.cpp
     
+    nau_camera_preview_layout_tests.cpp
     nau_commands_tests.cpp
     nau_file_operations_tests.cpp
     nau_settings_tests.cpp
@@ -69,6 +70,7 @@ target_include_directories(NauEditorUnitTests PRIVATE
  "${NAU_EDITOR_SOURCE_DIR}/project"
  "${NAU_EDITOR_SOURCE_DIR}/baseWidgets"
  "${NAU_EDITOR_SOURCE_DIR}/include"
+ "${NAU_EDITOR_SOURCE_DIR}/../modules/usd-asset-editor-synchronizer/src"
  "${NAU_EXTERNAL_DIR}/magic_enum/include"
 )
 

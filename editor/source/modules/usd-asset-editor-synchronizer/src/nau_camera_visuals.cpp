@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 #include "nau_camera_visuals.hpp"
+#include "nau_camera_preview_layout.hpp"
 
 #include <EASTL/unordered_set.h>
 
@@ -60,6 +61,7 @@ namespace nau::editor
             m_visualScene = nullptr;
         }
         m_visuals.clear();
+        m_editorBillboards.clear();
     }
 
     Uid CameraVisuals::cameraUidForMesh(Uid meshUid) const
@@ -82,26 +84,24 @@ namespace nau::editor
                    : NullUid;
     }
 
-    void CameraVisuals::setPreviewCamera(std::function<Uid()> resolver, std::optional<math::Transform> worldPose)
+    void CameraVisuals::setPreviewCamera(std::function<PreviewCamera()> resolver)
     {
         m_resolvePreviewCamera = std::move(resolver);
-        m_previewDirty = m_previewDirty || m_previewPose != worldPose;
-        m_previewPose = std::move(worldPose);
         updatePreview();
+    }
+
+    void CameraVisuals::trackEditorBillboard(scene::BillboardComponent& billboard)
+    {
+        m_editorBillboards.emplace_back(billboard);
+        m_previewDirty = true;
     }
 
     void CameraVisuals::updatePreview()
     {
-        Uid uid = m_running && m_resolvePreviewCamera ? m_resolvePreviewCamera() : NullUid;
-        if (uid)
-        {
-            const auto visual = m_visuals.find(uid);
-            if (visual == m_visuals.end() || !visual->second.camera)
-            {
-                uid = NullUid;
-            }
-        }
-        if (uid == m_previewCameraUid && (!uid || !m_previewDirty))
+        const auto [uid, worldPose] = m_running && m_resolvePreviewCamera ? m_resolvePreviewCamera() : PreviewCamera{};
+        const auto visual = m_visuals.find(uid);
+        const bool hasCamera = visual != m_visuals.end() && visual->second.camera;
+        if (!hasCamera && !m_previewCameraUid)
         {
             return;
         }
@@ -112,20 +112,49 @@ namespace nau::editor
             return;
         }
 
-        eastl::vector<Uid> excludedMeshes;
-        if (uid)
+        QRect rect;
+        if (hasCamera)
         {
-            excludedMeshes.reserve(m_visuals.size());
-            for (const auto& [cameraUid, visual] : m_visuals)
+            int32_t width = 0, height = 0;
+            window->getViewportSize(width, height);
+            rect = cameraPreviewRect(width, height);
+        }
+        if (rect.isEmpty())
+        {
+            if (m_previewCameraUid)
             {
-                if (visual.mesh)
-                {
-                    excludedMeshes.push_back(visual.mesh->getUid());
-                }
+                window->setCameraPreview(std::nullopt);
+                m_previewCameraUid = NullUid;
+            }
+            return;
+        }
+
+        if (uid == m_previewCameraUid && rect == m_previewRect && worldPose == m_submittedPose && !m_previewDirty)
+        {
+            return;
+        }
+
+        render::CameraPreview preview{uid, {}, worldPose, CameraPreviewRenderWidth, CameraPreviewRenderHeight,
+                                      rect.x(), rect.y(), rect.width(), rect.height()};
+        preview.excludedComponents.reserve(m_visuals.size() + m_editorBillboards.size());
+        for (const auto& [cameraUid, cameraVisual] : m_visuals)
+        {
+            if (cameraVisual.mesh)
+            {
+                preview.excludedComponents.push_back(cameraVisual.mesh->getUid());
             }
         }
-        window->setCameraPreview(uid, std::move(excludedMeshes), uid ? m_previewPose : std::nullopt);
+        for (const auto& billboard : m_editorBillboards)
+        {
+            if (billboard)
+            {
+                preview.excludedComponents.push_back(billboard->getUid());
+            }
+        }
+        window->setCameraPreview(std::move(preview));
         m_previewCameraUid = uid;
+        m_previewRect = rect;
+        m_submittedPose = worldPose;
         m_previewDirty = false;
     }
 
@@ -227,6 +256,10 @@ namespace nau::editor
         if (m_running)
         {
             updateVisuals();
+            if (eastl::erase_if(m_editorBillboards, [](const auto& billboard) { return !billboard; }))
+            {
+                m_previewDirty = true;
+            }
             updatePreview();
         }
     }

@@ -4,11 +4,14 @@
 #pragma once
 
 #include <EASTL/unordered_map.h>
+#include <EASTL/vector.h>
+#include <QRect>
 
 #include <functional>
 #include <optional>
 
 #include "nau/async/task.h"
+#include "nau/scene/components/billboard_component.h"
 #include "nau/scene/components/camera_component.h"
 #include "nau/scene/components/static_mesh_component.h"
 #include "nau/scene/internal/scene_listener.h"
@@ -23,6 +26,12 @@ namespace nau::editor
     public:
         using TransformResolver = std::function<math::Transform(const scene::CameraComponent&)>;
 
+        struct PreviewCamera
+        {
+            Uid uid = NullUid;
+            std::optional<math::Transform> worldPose;
+        };
+
         explicit CameraVisuals(scene::IScene& scene, TransformResolver transformResolver = {});
         CameraVisuals(const CameraVisuals&) = delete;
         CameraVisuals(CameraVisuals&&) = delete;
@@ -33,7 +42,8 @@ namespace nau::editor
         async::Task<> activate();
         async::Task<> shutdown();
         void updateTransforms();
-        void setPreviewCamera(std::function<Uid()> resolver, std::optional<math::Transform> worldPose = {});
+        void setPreviewCamera(std::function<PreviewCamera()> resolver);
+        void trackEditorBillboard(scene::BillboardComponent& billboard);
 
         Uid cameraUidForMesh(Uid meshUid) const;
         Uid meshUidForCamera(Uid cameraUid) const;
@@ -65,12 +75,14 @@ namespace nau::editor
         scene::IScene::WeakRef m_scene;
         scene::IScene::WeakRef m_visualScene;
         TransformResolver m_transformResolver;
-        std::function<Uid()> m_resolvePreviewCamera;
-        Uid m_previewCameraUid;
-        std::optional<math::Transform> m_previewPose;
+        std::function<PreviewCamera()> m_resolvePreviewCamera;
+        Uid m_previewCameraUid = NullUid;
+        QRect m_previewRect;
+        std::optional<math::Transform> m_submittedPose;
         bool m_previewDirty = false;
         bool m_running = false;
         eastl::unordered_map<Uid, Visual> m_visuals;
+        eastl::vector<scene::ObjectWeakRef<scene::BillboardComponent>> m_editorBillboards;
         // unregister before destroying the state used by callbacks
         scene::SceneListenerRegistration m_registration;
     };

@@ -8,6 +8,7 @@
 #include "usd_translator/usd_component_adapter.h"
 #include "usd_proxy/usd_stage_watcher.h"
 #include <QCoreApplication>
+#include <QTimer>
 #include "nau/scene/scene_manager.h"
 #include "nau/scene/scene_factory.h"
 #include "nau/service/service_provider.h"
@@ -149,6 +150,43 @@ namespace
         }
         pxr::UsdGeomXformCache cache;
         return cameraTransformFromMatrix(cache.GetLocalToWorldTransform(adapter->getPrim()));
+    }
+
+    std::optional<nau::math::Transform> cameraPreviewUsdPose(const UsdTranslator::IPrimAdapter::Ptr& rootAdapter, const pxr::UsdPrim& cameraPrim)
+    {
+        pxr::UsdGeomXformCache cache;
+        auto current = rootAdapter;
+        auto parentObject = current->getSceneObject();
+        for (const auto& prefix : cameraPrim.GetPath().GetPrefixes())
+        {
+            current = current->getChild(prefix.GetNameToken());
+            if (!current)
+            {
+                return std::nullopt;
+            }
+            const pxr::UsdPrim prim = current->getPrim();
+            const auto object = current->getSceneObject();
+            bool resetStack = false;
+            const auto local = cache.GetLocalTransformation(prim, &resetStack);
+            // An attached component has its own transform, but its USD children
+            // attach to the owner's root component and lose that ancestor's TRS.
+            const bool skippedAncestor = prim != cameraPrim && (!object || object.get() == parentObject.get());
+            // NauComponent only imports its local transform when this attribute exists.
+            static const pxr::TfToken transformOp("xformOp:transform");
+            const bool skippedOps = current->getType() == "NauComponent" && !prim.HasAttribute(transformOp);
+            if (resetStack || local.GetDeterminant3() <= 0.0 ||
+                ((skippedAncestor || skippedOps) && local != pxr::GfMatrix4d(1.0)))
+            {
+                return cameraTransformFromMatrix(cache.GetLocalToWorldTransform(cameraPrim));
+            }
+            if (object)
+            {
+                parentObject = object;
+            }
+        }
+        // The translator applies local TRS. Decomposing the multiplied USD
+        // matrix here would introduce shear from nonuniformly scaled parents.
+        return std::nullopt;
     }
 
     bool cameraTransformsChanged(const pxr::UsdNotice::ObjectsChanged& notice)
@@ -298,7 +336,8 @@ void NauEngineSceneListener::onComponentsChange(eastl::span<const nau::scene::Co
 // ** NauUsdSceneSynchronizer
 
 NauUsdSceneSynchronizer::NauUsdSceneSynchronizer()
-    : m_sceneListener(nullptr)
+    : m_billboardTimerContext(std::make_unique<QObject>())
+    , m_sceneListener(nullptr)
     , m_syncMode(SyncMode::None)
 {
     m_billboardIcons[BillboardTypes::SphereLight] = "file:/res/Images/billbords/Banner_Light_Bulb.png";
@@ -404,6 +443,9 @@ void NauUsdSceneSynchronizer::startSyncFromEditorSceneInternal(pxr::UsdStageRefP
 
 void NauUsdSceneSynchronizer::stopCameraVisuals()
 {
+    // Cancel delayed billboards before unloading the scene. The outliner can
+    // request new billboards before the next scene's translator is initialized.
+    m_billboardTimerContext = std::make_unique<QObject>();
     m_cameraTransformWatcher.reset();
     m_previewSelection = {};
     if (m_cameraVisuals)
@@ -515,15 +557,14 @@ void NauUsdSceneSynchronizer::refreshCameraPreview()
         m_cameraVisuals->setPreviewCamera({});
         return;
     }
-    pxr::UsdGeomXformCache cache;
-    auto pose = cameraTransformFromMatrix(cache.GetLocalToWorldTransform(cameraPrim));
-    pose.setScale(1.f, 1.f, 1.f);
     // The adapter and its component can activate after selection or be replaced by a USD resync.
-    m_cameraVisuals->setPreviewCamera([this, cameraPrim, prefixes = cameraPrim.GetPath().GetPrefixes()]() -> nau::Uid
+    m_cameraVisuals->setPreviewCamera([this, cameraPrim, prefixes = cameraPrim.GetPath().GetPrefixes(),
+                                       resolved = nau::scene::ObjectWeakRef<nau::scene::Component>{}, target = nau::editor::CameraVisuals::PreviewCamera{}]()
+                                       mutable -> nau::editor::CameraVisuals::PreviewCamera
     {
         if (!cameraPrim)
         {
-            return nau::NullUid;
+            return {};
         }
         auto adapter = m_sceneTranslator->getRootAdapter();
         for (const auto& prefix : prefixes)
@@ -531,18 +572,23 @@ void NauUsdSceneSynchronizer::refreshCameraPreview()
             adapter = adapter->getChild(prefix.GetNameToken());
             if (!adapter)
             {
-                return nau::NullUid;
+                return {};
             }
         }
         if (const auto* component = componentAdapter(*adapter))
         {
             if (auto camera = component->getComponent(); camera && camera->is<nau::scene::CameraComponent>())
             {
-                return camera->getUid();
+                if (resolved.get() != camera.get())
+                {
+                    resolved = camera;
+                    target = {camera->getUid(), cameraPreviewUsdPose(m_sceneTranslator->getRootAdapter(), cameraPrim)};
+                }
+                return target;
             }
         }
-        return nau::NullUid;
-    }, pose);
+        return {};
+    });
 }
 
 pxr::SdfPath NauUsdSceneSynchronizer::primFromCameraMesh(const nau::Uid& uid) const
@@ -654,18 +700,26 @@ void NauUsdSceneSynchronizer::addBillboard(const pxr::SdfPath& primPath, const s
     }
 
     auto type = magic_enum::enum_cast<BillboardTypes>(normalizePrimType).value_or(BillboardTypes::Unrecognized);
-    if (!m_billboardIcons.contains(type)) {
+    if (m_syncMode == SyncMode::FromEngine || !m_billboardIcons.contains(type) || !primPath.IsPrimPath()) {
         return;
     }
 
-    QTimer::singleShot(200, [this, type, primPath]() {
-        nau::scene::SceneObject* object = sceneObjectByPrimPath(primPath).get();
-        auto& factory = nau::getServiceProvider().get<nau::scene::ISceneFactory>();
+    const std::optional<pxr::UsdPrim> requestedPrim = m_syncMode == SyncMode::FromEditor
+        ? std::make_optional(m_editorCurrentScene->GetPrimAtPath(primPath)) : std::nullopt;
+    QTimer::singleShot(200, m_billboardTimerContext.get(), [this, type, primPath, requestedPrim]() {
+        if (!m_cameraVisuals || (requestedPrim && !*requestedPrim)) {
+            return;
+        }
+        auto object = sceneObjectByPrimPath(primPath);
+        if (!object || object->getScene() != m_engineCurrentScene.get()) {
+            return;
+        }
 
         auto& billboardObj = object->addComponent<nau::scene::BillboardComponent>();
         billboardObj.setScale({ 1.0f, 1.0f, 1.0f });
         billboardObj.setTextureRef(eastl::string_view(m_billboardIcons.at(type).c_str()));
         billboardObj.setScreenPercentageSize(0.025f);
+        m_cameraVisuals->trackEditorBillboard(billboardObj);
     });
 }
 
