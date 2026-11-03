@@ -7,6 +7,8 @@
 
 #include <utility>
 
+#include "nau/graphics/core_graphics.h"
+#include "nau/render/render_window.h"
 #include "nau/scene/scene_factory.h"
 #include "nau/scene/scene_manager.h"
 #include "nau/scene/scene_object.h"
@@ -43,6 +45,7 @@ namespace nau::editor
     async::Task<> CameraVisuals::shutdown()
     {
         m_running = false;
+        setPreviewCamera({});
         m_registration.reset();
         for (auto& [uid, visual] : m_visuals)
         {
@@ -79,12 +82,60 @@ namespace nau::editor
                    : NullUid;
     }
 
+    void CameraVisuals::setPreviewCamera(std::function<Uid()> resolver, std::optional<math::Transform> worldPose)
+    {
+        m_resolvePreviewCamera = std::move(resolver);
+        m_previewDirty = m_previewDirty || m_previewPose != worldPose;
+        m_previewPose = std::move(worldPose);
+        updatePreview();
+    }
+
+    void CameraVisuals::updatePreview()
+    {
+        Uid uid = m_running && m_resolvePreviewCamera ? m_resolvePreviewCamera() : NullUid;
+        if (uid)
+        {
+            const auto visual = m_visuals.find(uid);
+            if (visual == m_visuals.end() || !visual->second.camera)
+            {
+                uid = NullUid;
+            }
+        }
+        if (uid == m_previewCameraUid && (!uid || !m_previewDirty))
+        {
+            return;
+        }
+        auto* graphics = getServiceProvider().find<ICoreGraphics>();
+        auto window = graphics ? graphics->getDefaultRenderWindow().acquire() : nullptr;
+        if (!window)
+        {
+            return;
+        }
+
+        eastl::vector<Uid> excludedMeshes;
+        if (uid)
+        {
+            excludedMeshes.reserve(m_visuals.size());
+            for (const auto& [cameraUid, visual] : m_visuals)
+            {
+                if (visual.mesh)
+                {
+                    excludedMeshes.push_back(visual.mesh->getUid());
+                }
+            }
+        }
+        window->setCameraPreview(uid, std::move(excludedMeshes), uid ? m_previewPose : std::nullopt);
+        m_previewCameraUid = uid;
+        m_previewDirty = false;
+    }
+
     scene::SceneObject::Ptr CameraVisuals::createVisual(Visual& visual)
     {
         scene::SceneObject::Ptr object = getServiceProvider().get<scene::ISceneFactory>().createSceneObject<scene::StaticMeshComponent>();
         object->setName("Editor camera mesh");
         scene::StaticMeshComponent& mesh = object->getRootComponent<scene::StaticMeshComponent>();
         visual.mesh = mesh;
+        m_previewDirty = true;
         mesh.setMeshGeometry(StaticMeshAssetRef("file:/editor_camera/SM_EditorCamera_Nau.gltf+[mesh/0]"));
         mesh.setMaterial(MaterialAssetRef("file:/editor_camera/M_EditorCamera_Nau.nmat_inst_json"));
         mesh.setCastShadow(false);
@@ -151,6 +202,7 @@ namespace nau::editor
                     visual.mesh->getParentObject().destroy();
                 }
                 visualEntry = m_visuals.erase(visualEntry);
+                m_previewDirty = true;
                 continue;
             }
 
@@ -175,6 +227,7 @@ namespace nau::editor
         if (m_running)
         {
             updateVisuals();
+            updatePreview();
         }
     }
 

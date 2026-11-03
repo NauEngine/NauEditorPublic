@@ -6,6 +6,7 @@
 #include <EASTL/unordered_map.h>
 
 #include <functional>
+#include <optional>
 
 #include "nau/async/task.h"
 #include "nau/scene/components/camera_component.h"
@@ -32,6 +33,7 @@ namespace nau::editor
         async::Task<> activate();
         async::Task<> shutdown();
         void updateTransforms();
+        void setPreviewCamera(std::function<Uid()> resolver, std::optional<math::Transform> worldPose = {});
 
         Uid cameraUidForMesh(Uid meshUid) const;
         Uid meshUidForCamera(Uid cameraUid) const;
@@ -49,6 +51,7 @@ namespace nau::editor
         void updateVisuals();
         scene::SceneObject::Ptr createVisual(Visual& visual);
         void updateTransform(Visual& visual);
+        void updatePreview();
 
         void onSceneBegin() override;
         void onSceneEnd() override;
@@ -62,6 +65,10 @@ namespace nau::editor
         scene::IScene::WeakRef m_scene;
         scene::IScene::WeakRef m_visualScene;
         TransformResolver m_transformResolver;
+        std::function<Uid()> m_resolvePreviewCamera;
+        Uid m_previewCameraUid;
+        std::optional<math::Transform> m_previewPose;
+        bool m_previewDirty = false;
         bool m_running = false;
         eastl::unordered_map<Uid, Visual> m_visuals;
         // unregister before destroying the state used by callbacks

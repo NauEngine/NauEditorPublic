@@ -133,6 +133,7 @@ private:
     // Viewport sync
     std::shared_ptr<NauUsdSceneSynchronizer> m_sceneSynchronizer;
     NauCallbackId m_transformToolCallbackId;
+    NauCallbackId m_cameraPreviewCallbackId;
 
     // Viewport tools
     NauCameraControllerInterfacePtr m_cameraController;

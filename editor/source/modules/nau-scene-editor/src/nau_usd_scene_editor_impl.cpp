@@ -133,6 +133,7 @@ void NauUsdSceneEditor::postInitialize()
 
 void NauUsdSceneEditor::preTerminate()
 {
+    m_selectionContainer->selectionChangedDelegate.deleteCallback(m_cameraPreviewCallbackId);
     // Drain camera mesh activations
     m_sceneSynchronizer->stopCameraVisuals();
     // Unlink viewport from container
@@ -141,6 +142,11 @@ void NauUsdSceneEditor::preTerminate()
 
 void NauUsdSceneEditor::terminate()
 {
+    if (m_sceneSynchronizer)
+    {
+        m_selectionContainer->selectionChangedDelegate.deleteCallback(m_cameraPreviewCallbackId);
+        m_sceneSynchronizer->setCameraPreviewPrim({});
+    }
     m_sceneSynchronizer.reset();
 
     nau::getServiceProvider().get<NauOutlineManager>().reset();
@@ -479,6 +485,11 @@ void NauUsdSceneEditor::initViewportWidget()
 
     viewportContainer->setViewport(m_viewport, mainWindow.shortcutHub(), m_toolbar);
 
+    m_cameraPreviewCallbackId = m_selectionContainer->selectionChangedDelegate.addCallback([this](const NauUsdPrimsSelection& selection)
+    {
+        m_sceneSynchronizer->setCameraPreviewPrim(selection.empty() ? pxr::UsdPrim{} : selection.back());
+    });
+
     viewportContainer->connect(viewportContainer, &NauViewportContainerWidget::eventFocusRequested, [this]() {
         if (auto&& path = m_selectionContainer->lastSelectedPath(); !path.empty()) {
             m_sceneSynchronizer->focusOnObject(pxr::SdfPath(path));
@@ -538,6 +549,7 @@ void NauUsdSceneEditor::initViewportTools()
 
 void NauUsdSceneEditor::onSceneLoaded(pxr::UsdStageRefPtr scene, NauUsdSceneSynchronizer::SyncMode syncMode)
 {
+    m_sceneSynchronizer->setCameraPreviewPrim({});
     m_selectionContainer->clear(false);
     m_uiTranslator.reset();
     m_outlinerClient->clearItems();
@@ -553,6 +565,11 @@ void NauUsdSceneEditor::onSceneLoaded(pxr::UsdStageRefPtr scene, NauUsdSceneSync
 
     if (m_sceneSyncMode == NauUsdSceneSynchronizer::SyncMode::FromEditor) {
         m_sceneSynchronizer->startSyncFromEditorScene(scene);
+        const auto& selection = m_selectionContainer->selection();
+        if (!selection.empty())
+        {
+            m_sceneSynchronizer->setCameraPreviewPrim(selection.back());
+        }
     } else {
         const std::string coreScenePath = currentCoreScenePath();
         m_sceneSynchronizer->startSyncFromEngineScene(scene, coreScenePath);

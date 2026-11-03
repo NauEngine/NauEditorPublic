@@ -3,6 +3,7 @@
 
 #include "nau/nau_usd_scene_synchronizer.hpp"
 #include "nau_camera_visuals.hpp"
+#include <algorithm>
 #include "nau/io/virtual_file_system.h"
 #include "usd_translator/usd_component_adapter.h"
 #include "usd_proxy/usd_stage_watcher.h"
@@ -39,6 +40,34 @@ namespace
         // identifies the two ComponentAdapter implementations used by cameras.
         const std::string_view type = adapter.getType();
         return type == "NauComponent" || type == "NauSceneComponent" ? static_cast<const UsdTranslator::ComponentAdapter*>(&adapter) : nullptr;
+    }
+
+    bool isCameraPrim(const pxr::UsdPrim& prim)
+    {
+        static const pxr::TfToken componentType("componentTypeName");
+        std::string type;
+        const pxr::UsdAttribute attribute = prim.GetAttribute(componentType);
+        return attribute && attribute.Get(&type) && type == "nau::scene::CameraComponent";
+    }
+
+    pxr::UsdPrim selectedCameraPrim(const pxr::UsdPrim& selection)
+    {
+        if (!selection || isCameraPrim(selection))
+        {
+            return selection;
+        }
+        // Attached component prims share their owner's outliner row.
+        if (!NauUsdPrimUtils::isPrimComponent(selection))
+        {
+            for (const pxr::UsdPrim& child : selection.GetChildren())
+            {
+                if (NauUsdPrimUtils::isPrimComponent(child) && isCameraPrim(child))
+                {
+                    return child;
+                }
+            }
+        }
+        return {};
     }
 
     template <typename TPredicate>
@@ -352,6 +381,20 @@ void NauUsdSceneSynchronizer::startSyncFromEditorSceneInternal(pxr::UsdStageRefP
             {
                 m_cameraVisuals->updateTransforms();
             }
+            if (!m_previewSelection.IsEmpty())
+            {
+                const auto affectsSelection = [this](const pxr::SdfPath& path)
+                {
+                    return m_previewSelection.HasPrefix(path.GetPrimPath()) || path.HasPrefix(m_previewSelection);
+                };
+                const auto resynced = notice.GetResyncedPaths();
+                const auto changed = notice.GetChangedInfoOnlyPaths();
+                if (std::any_of(resynced.begin(), resynced.end(), affectsSelection) ||
+                    std::any_of(changed.begin(), changed.end(), affectsSelection))
+                {
+                    refreshCameraPreview();
+                }
+            }
         });
     };
 
@@ -362,6 +405,7 @@ void NauUsdSceneSynchronizer::startSyncFromEditorSceneInternal(pxr::UsdStageRefP
 void NauUsdSceneSynchronizer::stopCameraVisuals()
 {
     m_cameraTransformWatcher.reset();
+    m_previewSelection = {};
     if (m_cameraVisuals)
     {
         Nau::EditorEngine().runTaskSync(m_cameraVisuals->shutdown().detach());
@@ -446,6 +490,59 @@ void NauUsdSceneSynchronizer::stopSyncFromEngineSceneInternal()
 UsdTranslator::StageTranslator* NauUsdSceneSynchronizer::translator() const
 {
     return m_sceneTranslator.get();
+}
+
+void NauUsdSceneSynchronizer::setCameraPreviewPrim(const pxr::UsdPrim& prim)
+{
+    m_previewSelection = prim && m_syncMode == SyncMode::FromEditor && prim.GetStage() == m_editorCurrentScene ? prim.GetPath() : pxr::SdfPath{};
+    refreshCameraPreview();
+}
+
+void NauUsdSceneSynchronizer::refreshCameraPreview()
+{
+    if (!m_cameraVisuals)
+    {
+        return;
+    }
+    const pxr::UsdPrim selected = m_previewSelection.IsEmpty() ? pxr::UsdPrim{} : m_editorCurrentScene->GetPrimAtPath(m_previewSelection);
+    if (!selected)
+    {
+        m_previewSelection = {};
+    }
+    const pxr::UsdPrim cameraPrim = selectedCameraPrim(selected);
+    if (!cameraPrim)
+    {
+        m_cameraVisuals->setPreviewCamera({});
+        return;
+    }
+    pxr::UsdGeomXformCache cache;
+    auto pose = cameraTransformFromMatrix(cache.GetLocalToWorldTransform(cameraPrim));
+    pose.setScale(1.f, 1.f, 1.f);
+    // The adapter and its component can activate after selection or be replaced by a USD resync.
+    m_cameraVisuals->setPreviewCamera([this, cameraPrim, prefixes = cameraPrim.GetPath().GetPrefixes()]() -> nau::Uid
+    {
+        if (!cameraPrim)
+        {
+            return nau::NullUid;
+        }
+        auto adapter = m_sceneTranslator->getRootAdapter();
+        for (const auto& prefix : prefixes)
+        {
+            adapter = adapter->getChild(prefix.GetNameToken());
+            if (!adapter)
+            {
+                return nau::NullUid;
+            }
+        }
+        if (const auto* component = componentAdapter(*adapter))
+        {
+            if (auto camera = component->getComponent(); camera && camera->is<nau::scene::CameraComponent>())
+            {
+                return camera->getUid();
+            }
+        }
+        return nau::NullUid;
+    }, pose);
 }
 
 pxr::SdfPath NauUsdSceneSynchronizer::primFromCameraMesh(const nau::Uid& uid) const

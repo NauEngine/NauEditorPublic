@@ -84,6 +84,7 @@ public:
     void startSyncFromEditorScene(pxr::UsdStageRefPtr editorScene);
     void startSyncFromEngineScene(pxr::UsdStageRefPtr emptyEditorScene, const std::string& coreScenePath);
     void stopCameraVisuals();
+    void setCameraPreviewPrim(const pxr::UsdPrim& prim);
 
     nau::scene::SceneObject::WeakRef sceneObjectByPrimPath(const pxr::SdfPath& path) const;
     pxr::SdfPath primFromSceneObject(const nau::Uid& uid);
@@ -104,6 +105,7 @@ private:
     void stopSyncFromEngineSceneInternal();
 
     void unloadEngineScene();
+    void refreshCameraPreview();
 
 private:
     pxr::UsdStageRefPtr m_editorCurrentScene;
@@ -112,6 +114,7 @@ private:
     std::shared_ptr<UsdTranslator::StageTranslator> m_sceneTranslator;
     eastl::unique_ptr<nau::editor::CameraVisuals> m_cameraVisuals;
     std::unique_ptr<UsdProxy::StageObjectChangedWatcher> m_cameraTransformWatcher;
+    pxr::SdfPath m_previewSelection;
 
     std::shared_ptr<NauEngineSceneListener> m_sceneListener;
     nau::scene::SceneListenerRegistration m_sceneListenerReg;
