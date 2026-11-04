@@ -14,6 +14,16 @@ class NauProject;
 class NauSourceCompiler
 {
 public:
+    struct NauBuildProgress
+    {
+        QString stage;
+        qint64 completed = 0;
+        qint64 total = -1;
+        QString unit;
+        QString file;
+    };
+    using ProgressSink = std::function<void(const NauBuildProgress&)>;
+
     struct NauBuildSettings
     {
         QString configName;
@@ -26,7 +36,7 @@ public:
     virtual bool compileProjectSource(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) = 0;
     virtual bool checkBuildTool(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) = 0;
     virtual bool checkCmakeInPath(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) = 0;
-    virtual bool buildProject(const NauBuildSettings& buildSettings, const QString& projectRootDir, const QString& buildTool, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled = {}) = 0;
+    virtual bool buildProject(const NauBuildSettings& buildSettings, const QString& projectRootDir, const QString& buildTool, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled = {}, ProgressSink progressSink = {}) = 0;
 };
 
 
@@ -40,5 +50,5 @@ public:
     bool compileProjectSource(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
     bool checkBuildTool(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
     bool checkCmakeInPath(const NauProject& project, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink) override;
-    bool buildProject(const NauBuildSettings& buildSettings, const QString& projectRootDir, const QString& buildTool, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled) override;
+    bool buildProject(const NauBuildSettings& buildSettings, const QString& projectRootDir, const QString& buildTool, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled, ProgressSink progressSink = {}) override;
 };

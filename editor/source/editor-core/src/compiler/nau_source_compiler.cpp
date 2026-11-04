@@ -8,6 +8,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QDir>
+#include "nau_build_progress_parser.hpp"
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #endif
@@ -101,7 +102,7 @@ namespace {
         config.buildTool = project.buildToolPath();
     }
 
-    static bool runJob(NauSourceCompilerConfig& config, QByteArrayList& log, const QStringList& args, const std::function<bool()>& isCancelled = {})
+    static bool runJob(NauSourceCompilerConfig& config, QByteArrayList& log, const QStringList& args, const std::function<bool()>& isCancelled = {}, NauSourceCompiler::ProgressSink progressSink = {})
     {
 #ifdef Q_OS_WIN
         BuildProcessJob job;
@@ -115,8 +116,10 @@ namespace {
 #ifdef Q_OS_WIN
         if (isCancelled) job.configure(configureProcess);
 #endif
+        auto environment = config.env;
+        if (progressSink) environment.insert("NAU_BUILD_EVENTS", "1");
         configureProcess.setWorkingDirectory(config.projectRootDir);
-        configureProcess.setProcessEnvironment(config.env);
+        configureProcess.setProcessEnvironment(environment);
 
         config.logFile.write("Staring ");
         config.logFile.write(config.buildTool.toLocal8Bit());
@@ -135,7 +138,18 @@ namespace {
             return false;
         }
 
+        QByteArray out, errors;
+        NauBuildProgressParser stdoutParser(progressSink), stderrParser(progressSink);
+        const auto drain = [&] {
+            auto chunk = configureProcess.readAllStandardOutput();
+            stdoutParser.feed(chunk);
+            out += chunk;
+            chunk = configureProcess.readAllStandardError();
+            stderrParser.feed(chunk);
+            errors += chunk;
+        };
         while (configureProcess.state() == QProcess::Running) {
+            drain();
             if (isCancelled && isCancelled()) {
                 config.logFile.write("Build cancelled by user\r\n");
 #ifdef Q_OS_WIN
@@ -152,14 +166,17 @@ namespace {
             configureProcess.waitForFinished(50);
         }
 
-        auto out = configureProcess.readAllStandardOutput();
-        auto errors = configureProcess.readAllStandardError();
+        drain();
+        stdoutParser.finish();
+        stderrParser.finish();
         config.logFile.write(out);
         config.logFile.write(errors);
 
         log.clear();
-        log.append(out.split('\n'));
-        log.append(errors.split('\n'));
+        for (const auto& line : out.split('\n'))
+            if (!line.startsWith("NAU_BUILD_EVENT ")) log.append(line);
+        for (const auto& line : errors.split('\n'))
+            if (!line.startsWith("NAU_BUILD_EVENT ")) log.append(line);
         log.append(QStringLiteral("Build tool finished with %1").arg(configureProcess.exitCode()).toLocal8Bit());
 
         return configureProcess.exitStatus() == QProcess::NormalExit
@@ -297,7 +314,7 @@ bool NauWinDllCompilerCpp::checkCmakeInPath(const NauProject& project, std::vect
 
 }
 
-bool NauWinDllCompilerCpp::buildProject(const NauSourceCompiler::NauBuildSettings& buildSettings, const QString& projectRootDir, const QString& buildTool, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled)
+bool NauWinDllCompilerCpp::buildProject(const NauSourceCompiler::NauBuildSettings& buildSettings, const QString& projectRootDir, const QString& buildTool, std::vector<std::string>& logStrings, std::function<void(const QString&)> stageSink, const std::function<bool()>& isCancelled, ProgressSink progressSink)
 {
     stageSink(tr("Building project scripts"));
 
@@ -331,7 +348,7 @@ bool NauWinDllCompilerCpp::buildProject(const NauSourceCompiler::NauBuildSetting
         args.push_back("--openAfterBuild");
     }
 
-    if (runJob(config, logStringsRaw, args, isCancelled)) {
+    if (runJob(config, logStringsRaw, args, isCancelled, std::move(progressSink))) {
         stageSink(tr("Publishing done successfully"));
         result = true;
     }
