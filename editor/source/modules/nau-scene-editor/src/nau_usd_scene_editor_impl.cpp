@@ -133,12 +133,20 @@ void NauUsdSceneEditor::postInitialize()
 
 void NauUsdSceneEditor::preTerminate()
 {
+    m_selectionContainer->selectionChangedDelegate.deleteCallback(m_cameraPreviewCallbackId);
+    // Drain camera mesh activations
+    m_sceneSynchronizer->stopCameraVisuals();
     // Unlink viewport from container
     m_viewport->setParent(nullptr);
 }
 
 void NauUsdSceneEditor::terminate()
 {
+    if (m_sceneSynchronizer)
+    {
+        m_selectionContainer->selectionChangedDelegate.deleteCallback(m_cameraPreviewCallbackId);
+        m_sceneSynchronizer->setCameraPreviewPrim({});
+    }
     m_sceneSynchronizer.reset();
 
     nau::getServiceProvider().get<NauOutlineManager>().reset();
@@ -304,12 +312,16 @@ void NauUsdSceneEditor::selectObject(QMouseEvent* event, float dpi)
         return;
     }
 
-    auto& sceneManager = nau::getServiceProvider().get<nau::scene::ISceneManagerInternal>();
-    if (auto* component = sceneManager.findComponent(objectUid)) {
-        objectUid = component->getParentObject().getUid();
+    pxr::SdfPath primPath = m_sceneSynchronizer->primFromCameraMesh(objectUid);
+    if (primPath.IsEmpty())
+    {
+        nau::scene::ISceneManagerInternal& sceneManager = nau::getServiceProvider().get<nau::scene::ISceneManagerInternal>();
+        if (nau::scene::Component* component = sceneManager.findComponent(objectUid))
+        {
+            objectUid = component->getParentObject().getUid();
+        }
+        primPath = m_sceneSynchronizer->primFromSceneObject(objectUid);
     }
-
-    pxr::SdfPath primPath = m_sceneSynchronizer->primFromSceneObject(objectUid);
     if (primPath.IsEmpty()) {
         NED_CRITICAL("Selection failed. Object exist in engine scene and unsyncronized with editor scene!");
         m_selectionContainer->clear();
@@ -473,6 +485,11 @@ void NauUsdSceneEditor::initViewportWidget()
 
     viewportContainer->setViewport(m_viewport, mainWindow.shortcutHub(), m_toolbar);
 
+    m_cameraPreviewCallbackId = m_selectionContainer->selectionChangedDelegate.addCallback([this](const NauUsdPrimsSelection& selection)
+    {
+        m_sceneSynchronizer->setCameraPreviewPrim(selection.empty() ? pxr::UsdPrim{} : selection.back());
+    });
+
     viewportContainer->connect(viewportContainer, &NauViewportContainerWidget::eventFocusRequested, [this]() {
         if (auto&& path = m_selectionContainer->lastSelectedPath(); !path.empty()) {
             m_sceneSynchronizer->focusOnObject(pxr::SdfPath(path));
@@ -532,6 +549,7 @@ void NauUsdSceneEditor::initViewportTools()
 
 void NauUsdSceneEditor::onSceneLoaded(pxr::UsdStageRefPtr scene, NauUsdSceneSynchronizer::SyncMode syncMode)
 {
+    m_sceneSynchronizer->setCameraPreviewPrim({});
     m_selectionContainer->clear(false);
     m_uiTranslator.reset();
     m_outlinerClient->clearItems();
@@ -547,6 +565,11 @@ void NauUsdSceneEditor::onSceneLoaded(pxr::UsdStageRefPtr scene, NauUsdSceneSync
 
     if (m_sceneSyncMode == NauUsdSceneSynchronizer::SyncMode::FromEditor) {
         m_sceneSynchronizer->startSyncFromEditorScene(scene);
+        const auto& selection = m_selectionContainer->selection();
+        if (!selection.empty())
+        {
+            m_sceneSynchronizer->setCameraPreviewPrim(selection.back());
+        }
     } else {
         const std::string coreScenePath = currentCoreScenePath();
         m_sceneSynchronizer->startSyncFromEngineScene(scene, coreScenePath);
@@ -635,8 +658,16 @@ void NauUsdSceneEditor::addPrimFromOther(const pxr::SdfPathSet& primsPaths, PXR_
         return;
     }
 
+    pxr::TfToken creationType = other.GetTypeName();
+    const pxr::UsdAttribute componentTypeAttribute = other.GetAttribute(pxr::TfToken("componentTypeName"));
+    std::string componentTypeName;
+    if (componentTypeAttribute && componentTypeAttribute.Get(&componentTypeName) && componentTypeName == "nau::scene::CameraComponent")
+    {
+        creationType = pxr::TfToken(componentTypeName);
+    }
+
     std::string uniquePath = "";
-    PXR_NS::UsdPrim newPrim = createPrim(parentPath, other.GetName(), other.GetTypeName(), NauUsdPrimUtils::isPrimComponent(other), uniquePath);
+    PXR_NS::UsdPrim newPrim = createPrim(parentPath, other.GetName(), creationType, NauUsdPrimUtils::isPrimComponent(other), uniquePath);
 
     for (auto childPrim : other.GetAllChildren()) {
         addPrimFromOther(primsPaths, childPrim, newPrim.GetPath());

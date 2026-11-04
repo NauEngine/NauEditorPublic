@@ -75,6 +75,24 @@ set_target_properties (${TargetName} PROPERTIES FOLDER "${NauEditorFolder}/sourc
 set_target_properties(${TargetName} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/Debug/NauEditor)
 set_target_properties(${TargetName} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/Release/NauEditor)
 
+add_custom_target(NauEditorCameraProxyResources
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "${CMAKE_BINARY_DIR}/$<CONFIG>/NauEditor/editor_resources/meshes/textures"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/resources/editor/meshes/SM_EditorCamera_Nau.gltf"
+        "${CMAKE_SOURCE_DIR}/resources/editor/meshes/SM_EditorCamera_Nau.bin"
+        "${CMAKE_SOURCE_DIR}/resources/editor/meshes/M_EditorCamera_Nau.nmat_inst_json"
+        "${CMAKE_BINARY_DIR}/$<CONFIG>/NauEditor/editor_resources/meshes"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/resources/editor/meshes/textures/Camera_Palette_64.png"
+        "${CMAKE_SOURCE_DIR}/resources/editor/meshes/textures/Camera_Palette_64_deferred.dds"
+        "${CMAKE_BINARY_DIR}/$<CONFIG>/NauEditor/editor_resources/meshes/textures"
+    VERBATIM
+)
+
+set_target_properties(NauEditorCameraProxyResources PROPERTIES FOLDER "${NauEditorFolder}/source/modules")
+add_dependencies(${TargetName} NauEditorCameraProxyResources)
+
 if (TARGET NauKernel_Import AND TARGET NauFramework_Import)
   add_dependencies(${TargetName} NauKernel_Import NauFramework_Import)
 endif()

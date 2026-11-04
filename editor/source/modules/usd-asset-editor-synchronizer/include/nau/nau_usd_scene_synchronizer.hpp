@@ -12,7 +12,15 @@
 #include "nau/scene/internal/scene_manager_internal.h"
 
 #include "memory"
+#include <EASTL/unique_ptr.h>
+#include <vector>
 
+class QObject;
+
+namespace nau::editor
+{
+    class CameraVisuals;
+}
 
 // ** NauEngineSceneListener
 
@@ -77,9 +85,13 @@ public:
 
     void startSyncFromEditorScene(pxr::UsdStageRefPtr editorScene);
     void startSyncFromEngineScene(pxr::UsdStageRefPtr emptyEditorScene, const std::string& coreScenePath);
+    void stopCameraVisuals();
+    void setCameraPreviewPrim(const pxr::UsdPrim& prim);
 
     nau::scene::SceneObject::WeakRef sceneObjectByPrimPath(const pxr::SdfPath& path) const;
     pxr::SdfPath primFromSceneObject(const nau::Uid& uid);
+    pxr::SdfPath primFromCameraMesh(const nau::Uid& uid) const;
+    std::vector<nau::Uid> cameraMeshUidsForPrim(const pxr::SdfPath& path) const;
 
     // TODO: Move to controller
     void focusOnObject(const pxr::SdfPath& primPath) const;
@@ -95,12 +107,17 @@ private:
     void stopSyncFromEngineSceneInternal();
 
     void unloadEngineScene();
+    void refreshCameraPreview();
 
 private:
     pxr::UsdStageRefPtr m_editorCurrentScene;
     nau::scene::IScene::WeakRef m_engineCurrentScene;
 
     std::shared_ptr<UsdTranslator::StageTranslator> m_sceneTranslator;
+    eastl::unique_ptr<nau::editor::CameraVisuals> m_cameraVisuals;
+    std::unique_ptr<UsdProxy::StageObjectChangedWatcher> m_cameraTransformWatcher;
+    std::unique_ptr<QObject> m_billboardTimerContext;
+    pxr::SdfPath m_previewSelection;
 
     std::shared_ptr<NauEngineSceneListener> m_sceneListener;
     nau::scene::SceneListenerRegistration m_sceneListenerReg;

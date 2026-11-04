@@ -45,6 +45,11 @@ void NauOutlineManager::setHighlightObjects(const NauUsdPrimsSelection& selectio
         }
     }
     m_objectList.clear();
+    for (nau::Uid uid : m_cameraMeshUids)
+    {
+        graphics.setObjectHighlight(uid, false);
+    }
+    m_cameraMeshUids.clear();
     if (m_sceneEditorSynchronizer == nullptr) {
         return;
     }
@@ -57,6 +62,11 @@ void NauOutlineManager::setHighlightObjects(const NauUsdPrimsSelection& selectio
                 graphics.setObjectHighlight(mesh->getUid(), true);
                 m_objectList.emplace_back(object);
             }
+        }
+        for (nau::Uid uid : m_sceneEditorSynchronizer->cameraMeshUidsForPrim(selectedPrim.GetPath()))
+        {
+            graphics.setObjectHighlight(uid, true);
+            m_cameraMeshUids.push_back(uid);
         }
     }
 }
