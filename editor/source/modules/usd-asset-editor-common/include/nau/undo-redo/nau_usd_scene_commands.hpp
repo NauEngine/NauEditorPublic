@@ -48,7 +48,7 @@ public:
     NauCommandDescriptor description() const override;
 
 private:
-    const PXR_NS::GfMatrix4d& m_initialTransform;
+    const PXR_NS::GfMatrix4d m_initialTransform;
     const std::string m_typeName;
     const std::string m_displayName;
     const std::string m_path;
