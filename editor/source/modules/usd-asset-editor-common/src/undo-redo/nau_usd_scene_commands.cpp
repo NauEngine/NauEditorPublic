@@ -6,10 +6,15 @@
 #include "nau/utils/nau_usd_editor_utils.hpp"
 #include "nau_log.hpp"
 
+#include "pxr/base/tf/errorMark.h"
 #include "pxr/usd/usd/prim.h"
 #include "pxr/usd/usd/stage.h"
 #include "pxr/usd/usdGeom/xform.h"
 #include "pxr/usd/sdf/namespaceEdit.h"
+#include "pxr/usd/sdf/changeBlock.h"
+#include "pxr/usd/sdf/copyUtils.h"
+#include "pxr/usd/sdf/primSpec.h"
+#include "pxr/usd/sdf/schema.h"
 #include "pxr/usd/usdGeom/xformCache.h"
 
 #include <filesystem>
@@ -73,25 +78,80 @@ NauCommandRemoveUsdPrim::NauCommandRemoveUsdPrim(pxr::UsdStageRefPtr scene, cons
     : NauAbstractUsdSceneCommand(scene)
     , m_path(path)
 {
-    auto usdPrim = scene->GetPrimAtPath(pxr::SdfPath(path));
-    m_displayName = usdPrim.GetDisplayName();
-    m_typeName = usdPrim.GetTypeName().GetString();
 }
 
 void NauCommandRemoveUsdPrim::execute()
 {
-    m_currentScene->RemovePrim(pxr::SdfPath(m_path));
+    const pxr::SdfPath path(m_path);
+    const pxr::SdfLayerHandle layer = m_currentScene->GetRootLayer();
+
+    // Keep a copy of everything the root layer holds for the prim, so undo can bring it back unchanged
+    m_removedSpec.Reset();
+    m_siblingIndex.reset();
+    if (pxr::SdfPrimSpecHandle parentSpec = layer->GetPrimAtPath(path.GetParentPath())) {
+        size_t index = 0;
+        for (const pxr::SdfPrimSpecHandle& sibling : parentSpec->GetNameChildren()) {
+            if (sibling->GetPath() == path) {
+                m_siblingIndex = index;
+                break;
+            }
+            ++index;
+        }
+    }
+
+    if (m_siblingIndex) {
+        m_removedSpec = pxr::SdfLayer::CreateAnonymous();
+        if (path.GetParentPath() != pxr::SdfPath::AbsoluteRootPath()) {
+            pxr::SdfCreatePrimInLayer(m_removedSpec, path.GetParentPath());
+        }
+        pxr::SdfCopySpec(layer, path, m_removedSpec, path);
+    }
+
+    m_currentScene->RemovePrim(path);
 
     NED_DEBUG("Execute object remove command, path: {}", m_path);
 }
 
 void NauCommandRemoveUsdPrim::undo()
 {
-    auto newPrim = m_currentScene->DefinePrim(pxr::SdfPath(m_path), pxr::TfToken(m_typeName.c_str()));
-    newPrim.SetDisplayName(m_displayName);
+    if (!m_removedSpec) {
+        NED_WARNING("Undo object remove command: prim has no spec in the root layer, nothing to restore, path: {}", m_path);
+        return;
+    }
+
+    const pxr::SdfPath path(m_path);
+    const pxr::SdfLayerHandle layer = m_currentScene->GetRootLayer();
+
+    // One change notice for the whole restored prim
+    pxr::SdfChangeBlock changeBlock;
+
+    if (path.GetParentPath() != pxr::SdfPath::AbsoluteRootPath()) {
+        pxr::SdfCreatePrimInLayer(layer, path.GetParentPath());
+    }
+
+    if (!pxr::SdfCopySpec(m_removedSpec, path, layer, path)) {
+        NED_WARNING("Undo object remove command failed to restore prim, path: {}", m_path);
+        return;
+    }
+
+    // The copied spec is appended to its parent; put it back where it was among its siblings.
+    // USD reorders correctly here but also reports a coding error ("Cannot move </B> to </B>"),
+    // so its errors are dropped and the resulting order is checked instead.
+    pxr::SdfBatchNamespaceEdit edit;
+    edit.Add(pxr::SdfNamespaceEdit::Reorder(path, static_cast<pxr::SdfNamespaceEdit::Index>(*m_siblingIndex)));
+    {
+        pxr::TfErrorMark errorMark;
+        layer->Apply(edit);
+        errorMark.Clear();
+    }
+
+    const pxr::SdfPrimSpecHandle parentSpec = layer->GetPrimAtPath(path.GetParentPath());
+    const auto siblings = parentSpec->GetNameChildren();
+    if (*m_siblingIndex >= siblings.size() || siblings[*m_siblingIndex]->GetPath() != path) {
+        NED_WARNING("Undo object remove command failed to restore prim order, path: {}", m_path);
+    }
 
     NED_DEBUG("Undo object remove command, path: {}", m_path);
-    
 }
 
 NauCommandDescriptor NauCommandRemoveUsdPrim::description() const
@@ -303,6 +363,11 @@ NauCommandChangeUsdPrimAssetReference::NauCommandChangeUsdPrimAssetReference(pxr
 
 void NauCommandChangeUsdPrimAssetReference::execute()
 {
+    m_previousReferences = PXR_NS::VtValue();
+    if (PXR_NS::SdfPrimSpecHandle spec = m_currentScene->GetRootLayer()->GetPrimAtPath(m_path)) {
+        m_previousReferences = spec->GetField(PXR_NS::SdfFieldKeys->References);
+    }
+
     setPrimReference(m_value);
 
     NED_DEBUG("Execute asset reference changing command, path: {}", m_path.GetString());
@@ -310,7 +375,27 @@ void NauCommandChangeUsdPrimAssetReference::execute()
 
 void NauCommandChangeUsdPrimAssetReference::undo()
 {
-    setPrimReference(m_initialValue);
+    if (!m_initialValue.IsEmpty()) {
+        setPrimReference(m_initialValue);
+        NED_DEBUG("Undo asset reference changing command, path: {}", m_path.GetString());
+        return;
+    }
+
+    // No initial value was given (the usual case): put back the references the prim had before execute
+    PXR_NS::SdfPrimSpecHandle spec = m_currentScene->GetRootLayer()->GetPrimAtPath(m_path);
+    if (!spec) {
+        NED_WARNING("Undo asset reference changing command failed, no prim spec, path: {}", m_path.GetString());
+        return;
+    }
+
+    if (m_previousReferences.IsEmpty()) {
+        spec->ClearField(PXR_NS::SdfFieldKeys->References);
+    } else {
+        spec->SetField(PXR_NS::SdfFieldKeys->References, m_previousReferences);
+    }
+    if (auto prim = m_currentScene->GetPrimAtPath(m_path)) {
+        prim.Load();
+    }
 
     NED_DEBUG("Undo asset reference changing command, path: {}", m_path.GetString());
 }
