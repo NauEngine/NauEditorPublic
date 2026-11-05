@@ -12,9 +12,8 @@ NauShortcutHub::NauShortcutHub(NauMainWindow& parent)
 {
     setOperationKeySequence(NauShortcutOperation::ProjectBrowserCopy, NauKeySequence::Copy);
 
-    // Todo: Temporary disabling shortcut for cutting/deleting in content browser.
-    //setOperationKeySequence(NauShortcutOperation::ProjectBrowserCut, NauKeySequence::Cut);
-    //setOperationKeySequence(NauShortcutOperation::ProjectBrowserDelete, NauKeySequence(Qt::Key_Delete));
+    setOperationKeySequence(NauShortcutOperation::ProjectBrowserCut, NauKeySequence::Cut);
+    setOperationKeySequence(NauShortcutOperation::ProjectBrowserDelete, NauKeySequence(Qt::Key_Delete));
 
     setOperationKeySequence(NauShortcutOperation::ProjectBrowserPaste, NauKeySequence::Paste);
     setOperationKeySequence(NauShortcutOperation::ProjectBrowserRename, NauKeySequence(Qt::Key_F2));

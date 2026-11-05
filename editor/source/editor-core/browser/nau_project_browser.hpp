@@ -67,6 +67,9 @@ private:
     void installSourceDirWatcher();
     void handleSourceDirChanged();
 
+    // Returns false and warns the user if any of specified directories contains undeletable items.
+    bool checkNoUndeletableContent(const QModelIndexList& indexes);
+
     static std::vector<NauEditorFileType> filterableItemTypes();
 
     // Underlying FS model loads the fs tree in on-demand mode.
