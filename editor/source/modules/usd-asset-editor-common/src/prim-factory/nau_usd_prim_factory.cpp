@@ -63,7 +63,12 @@ void NauUsdPrimFactory::addCreator(const std::string& primType, NauUsdPrimCreato
 pxr::UsdPrim NauUsdPrimFactory::createPrim(pxr::UsdStageWeakPtr stage, const pxr::SdfPath& path, const pxr::TfToken& typeName,
         const std::string& displayName, const pxr::GfMatrix4d& initialTransform, bool isComponent)
 {
-    NauUsdPrimCreatorAbstractPtr creator = m_creators[typeName.GetString()];
+    auto creatorIt = m_creators.find(typeName.GetString());
+    if (creatorIt == m_creators.end() || !creatorIt->second) {
+        NED_ERROR("Usd prim factory: no creator registered for type '{}', prim {} is not created.", typeName.GetString(), path.GetString());
+        return {};
+    }
+    NauUsdPrimCreatorAbstractPtr creator = creatorIt->second;
 
     std::string authoredName = displayName;
     if (isComponent) {

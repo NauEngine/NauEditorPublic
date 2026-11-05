@@ -4,6 +4,7 @@
 #include "nau_gui_editor.hpp"
 #include "nau/utils/nau_usd_editor_utils.hpp"
 #include "nau/prim-factory/nau_usd_prim_creator.hpp"
+#include "nau_log.hpp"
 #include "nau/scene/scene_manager.h"
 
 #include <unordered_set>
@@ -558,7 +559,13 @@ void NauGuiEditor::addPrimFromOther(const pxr::SdfPathSet& primsPaths, PXR_NS::U
         return;
     }
 
-    PXR_NS::UsdPrim newPrim = createPrim(parentPath, other.GetName(), other.GetTypeName(), NauUsdPrimUtils::isPrimComponent(other));
+    const PXR_NS::TfToken typeName(NauUsdPrimUtils::creationTypeName(other));
+    PXR_NS::UsdPrim newPrim = createPrim(parentPath, other.GetName(), typeName, NauUsdPrimUtils::isPrimComponent(other));
+    if (!newPrim) {
+        NED_WARNING("Failed to copy prim {}, its children are skipped", other.GetPath().GetString());
+        return;
+    }
+
     for (auto childPrim : other.GetAllChildren()) {
         addPrimFromOther(primsPaths, childPrim, newPrim.GetPath());
     }
