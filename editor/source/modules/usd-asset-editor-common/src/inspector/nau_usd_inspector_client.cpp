@@ -304,8 +304,14 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
             }
         }
     }
-
+    
+    
     for (auto prop : proxyPrim.getProperties()) {
+        // Skip the colorRGBA property for the Button component
+        if (prop.second->getName() == pxr::TfToken("colorRGBA") && proxyPrim.getPrim().GetTypeName() == pxr::TfToken("NauGuiButton")) {
+            continue;
+        }
+
         // Skip invisible properties
         pxr::VtValue visibilityValue;
         if (prop.second->getMetadata(pxr::TfToken("visible"), visibilityValue)) {
