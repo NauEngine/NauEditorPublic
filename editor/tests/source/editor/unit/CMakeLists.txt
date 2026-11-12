@@ -39,6 +39,7 @@ set(Sources
     
     nau_commands_tests.cpp
     nau_file_operations_tests.cpp
+    nau_project_browser_item_type_resolver_tests.cpp
     nau_settings_tests.cpp
     nau_editor_version_tests.cpp
     nau_test_demo.cpp
@@ -47,6 +48,7 @@ set(Sources
 set(EditorSources
     ${NAU_EDITOR_SOURCE_DIR}/commands/nau_commands.cpp ${NAU_EDITOR_SOURCE_DIR}/commands/nau_commands.hpp
     ${NAU_EDITOR_SOURCE_DIR}/browser/nau_file_operations.cpp ${NAU_EDITOR_SOURCE_DIR}/browser/nau_file_operations.hpp
+    ${NAU_EDITOR_SOURCE_DIR}/browser/nau_project_browser_item_type_resolver.cpp ${NAU_EDITOR_SOURCE_DIR}/browser/nau_project_browser_item_type_resolver.hpp
     ${NAU_EDITOR_SOURCE_DIR}/baseWidgets/nau_widget_utility.cpp ${NAU_EDITOR_SOURCE_DIR}/baseWidgets/nau_widget_utility.hpp
     ${NAU_EDITOR_SOURCE_DIR}/nau_settings.cpp ${NAU_EDITOR_SOURCE_DIR}/nau_settings.hpp
     ${NAU_EDITOR_SOURCE_DIR}/project/nau_project_path.cpp ${NAU_EDITOR_SOURCE_DIR}/project/nau_project_path.hpp
@@ -69,6 +71,7 @@ target_include_directories(NauEditorUnitTests PRIVATE
  "${NAU_EDITOR_SOURCE_DIR}/project"
  "${NAU_EDITOR_SOURCE_DIR}/baseWidgets"
  "${NAU_EDITOR_SOURCE_DIR}/include"
+ "${NAU_EDITOR_ENGINE_SOURCE_DIR}/include"
  "${NAU_EXTERNAL_DIR}/magic_enum/include"
 )
 

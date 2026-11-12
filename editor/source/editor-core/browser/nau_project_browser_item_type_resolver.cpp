@@ -70,6 +70,9 @@ NauProjectBrowserItemTypeResolver::ItemTypeDescription NauProjectBrowserItemType
         {QStringLiteral("nauscene"), { NauEditorFileType::Scene,
             QStringLiteral("NauEditor Scene"), tr("Scene file")}},
 
+        {QStringLiteral("nausd_scene"), { NauEditorFileType::Scene,
+            QStringLiteral("NauEditor Scene"), tr("Scene file")}},
+
         {QString(NAU_ANIMATION_EXTENSION_NAME), { NauEditorFileType::Animation,
             QStringLiteral("Nau animation"), tr("Animation file")}},
 
