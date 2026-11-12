@@ -23,6 +23,7 @@
 #include "project/nau_project_manager_window.hpp"
 #include "nau_asset_importer.hpp"
 #include "nau_content_creator.hpp"
+#include "browser/nau_file_operations.hpp"
 #include "browser/nau_project_browser_item_type_resolver.hpp"
 #include "nau_log.hpp"
 #include "nau_settings.hpp"
@@ -370,6 +371,12 @@ void NauEditor::initAssetManagerModule()
 {
     auto& assetProcessor = Nau::EditorServiceProvider().get<NauAssetFileProcessorInterface>();
     m_assetManager = std::make_shared<NauAssetManager>(&assetProcessor);
+
+    NauFileOperations::setAssetMetaOperations({
+        [&assetProcessor](const QString& metaFilePath) {
+            return QString::fromStdString(assetProcessor.assetSourceFile(metaFilePath.toStdString()));
+        },
+    });
     m_assetManager->initialize(*m_project);
 
     NauFileAccess::setAssetManager(m_assetManager.get());

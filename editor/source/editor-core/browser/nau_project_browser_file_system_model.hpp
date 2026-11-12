@@ -56,6 +56,8 @@ public:
 
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;
 
+    NauEditorFileType resolveItemType(const QString& filePath) const;
+
     static Column sortTypeToColumn(NauSortType type);
     static NauSortType columnToSortType(Column column);
 

@@ -24,6 +24,7 @@ public:
     void setAssetFileUid(const std::filesystem::path& assetSource) override;
     int importAsset(const std::filesystem::path& project, const std::filesystem::path& assetSource) override;
     std::string sourcePathFromAssetFile(const std::string& assetPath) override;
+    std::string assetSourceFile(const std::string& metaFilePath) override;
 
     std::string_view assetFileFilter() const override;
     std::string_view assetFileExtension() const override;

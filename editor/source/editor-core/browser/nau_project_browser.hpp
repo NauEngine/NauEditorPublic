@@ -67,6 +67,12 @@ private:
     void installSourceDirWatcher();
     void handleSourceDirChanged();
 
+    // Returns false and warns the user if any of specified directories contains undeletable items.
+    bool checkNoUndeletableContent(const QModelIndexList& indexes);
+
+    // Returns false and warns the user if any selected asset shares its source with an unselected asset.
+    bool checkNoSharedAssetSources(const QModelIndexList& indexes);
+
     static std::vector<NauEditorFileType> filterableItemTypes();
 
     // Underlying FS model loads the fs tree in on-demand mode.

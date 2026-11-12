@@ -14,6 +14,8 @@
 #include "nau/asset_tools/asset_api.h"
 
 #include <QApplication>
+#include <QDir>
+#include <QFileInfo>
 #include "nau/usd_meta_tools/usd_meta_info.h"
 
 #include <pxr/usd/ar/defineResolver.h>
@@ -197,6 +199,24 @@ std::string NauUsdAssetProcessor::sourcePathFromAssetFile(const std::string& ass
 
             return assetFolderPath.GetPathString() + "\\" + std::string(assetMetaInfo.sourcePath.c_str());
         }
+    }
+
+    return std::string();
+}
+
+std::string NauUsdAssetProcessor::assetSourceFile(const std::string& metaFilePath)
+{
+    // The path is taken from the meta file itself, not from asset database: database records aren't updated
+    // on moving, and a copied meta file has the same uid, so the database would point to the source of the original.
+    for (const nau::UsdMetaInfo& meta : nau::UsdMetaManager::instance().getInfo(metaFilePath)) {
+        if (meta.assetSourcePath.empty()) {
+            continue;
+        }
+
+        const QDir metaFileDir = QFileInfo(QString::fromStdString(metaFilePath)).absoluteDir();
+        const QFileInfo sourceFile(metaFileDir, QString::fromStdString(meta.assetSourcePath));
+
+        return sourceFile.absoluteFilePath().toStdString();
     }
 
     return std::string();

@@ -13,7 +13,6 @@
 
 #include "project/nau_project.hpp"
 #include "magic_enum/magic_enum.hpp"
-#include "magic_enum/magic_enum_utility.hpp"
 #include "filter/nau_search_widget.hpp"
 #include "themes/nau_theme.hpp"
 #include "nau/nau_constants.hpp"
@@ -224,11 +223,18 @@ NauProjectBrowser::NauProjectBrowser(NauShortcutHub* shortcutHub, NauWidget* par
         });
 
         setCursor(Qt::CursorShape::BusyCursor);
-        NauFileOperations::pasteFromClipboard(parent);
+        if (!NauFileOperations::pasteFromClipboard(parent)) {
+            QMessageBox::warning(this, tr("NauEditor"),
+                tr("Failed to paste the item(s). They may be in use, or the items with the same names already exist in the destination folder."));
+        }
     });
 
     connect(m_fileOperationMenu.get(), &NauProjectBrowserFileOperationsMenu::eventCutRequested,
-        NauFileOperations::cutToClipboard);
+        [this](const QModelIndexList& indexes) {
+        if (!checkNoUndeletableContent(indexes) || !checkNoSharedAssetSources(indexes)) return;
+
+        NauFileOperations::cutToClipboard(indexes);
+    });
 
     connect(m_fileOperationMenu.get(), &NauProjectBrowserFileOperationsMenu::eventDuplicateRequested,
          [this](const QModelIndexList& indexes) {
@@ -267,6 +273,8 @@ NauProjectBrowser::NauProjectBrowser(NauShortcutHub* shortcutHub, NauWidget* par
 
     connect(m_fileOperationMenu.get(), &NauProjectBrowserFileOperationsMenu::eventDeleteRequested, 
         [this](QAbstractItemView* view, const QModelIndexList& indexes) {
+        if (!checkNoUndeletableContent(indexes)) return;
+
         QStringList delFileList;
 
         for (const QModelIndex& index : indexes) {
@@ -274,26 +282,19 @@ NauProjectBrowser::NauProjectBrowser(NauShortcutHub* shortcutHub, NauWidget* par
         }
 
         if (QMessageBox::question(this, tr("NauEditor"),
-                tr("Delete selected item(s)? This action cannot be undone.")) != QMessageBox::StandardButton::Yes) {
+                tr("Delete selected item(s)? They will be moved to trash.")) != QMessageBox::StandardButton::Yes) {
             NED_TRACE("User rejected to delete resource(s)");
             return;
         }
 
-        for (const auto& file : delFileList) {
-            // Note that it's a bad idea to remove resource via WinAPI
-            // Underlying Qt's FS model installs the watchers that can lead to files to be locked on Windows.
-            const QModelIndex fsModelIndex = m_fsModel->index(file);
-            const QString path = fsModelIndex.data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
-            const bool result = NauFileOperations::deletePathRecursively(path);
-            
-            if (!result) {
-                NED_ERROR("Failed to move to trash {}", file.toUtf8().constData());
-            } else {
-                NED_TRACE("Successfully moved to trash {}", file.toUtf8().constData());
-            }
-        }
+        const bool result = NauFileOperations::moveAssetsToTrash(delFileList);
 
         setCurrentDirInList(m_tree->currentIndex());
+
+        if (!result) {
+            QMessageBox::warning(this, tr("NauEditor"),
+                tr("Failed to move the selected item(s) to trash. They may be in use by the editor or another program."));
+        }
     });
 
     connect(m_fileOperationMenu.get(), &NauProjectBrowserFileOperationsMenu::eventViewInShellRequested,
@@ -360,13 +361,12 @@ bool NauProjectBrowser::setProject(const NauProject& project)
     m_fsProxy->setSourceModel(m_fsModel.get());
     m_fsProxy->setAllowedDirs({"\\content\\", "\\source\\"});
     m_fsProxy->setBlackListResourcesWildcard({"\\content\\shaders"});
-    
-    // To-Do: Temporary workaround. Not all items must be undeletable.
-    QList<NauEditorFileType> undeletableTypes;
-    magic_enum::enum_for_each<NauEditorFileType>([&undeletableTypes] (auto type) {
-        undeletableTypes << type;
+    m_fsProxy->setUndeletableFileTypes({
+        NauEditorFileType::Project,
+        NauEditorFileType::EngineCore,
+        NauEditorFileType::Scene,
+        NauEditorFileType::Shader,
     });
-    m_fsProxy->setUndeletableFileTypes(undeletableTypes);
 
     m_treeProxy = std::make_unique<NauProjectTreeProxyModel>();
     m_treeProxy->setSourceModel(m_fsProxy.get());
@@ -395,7 +395,11 @@ bool NauProjectBrowser::setProject(const NauProject& project)
     m_contentViewScale->setScale(0.5);
     m_sortTypeWidget->setSortTypeAndOrder(NauSortType::Name, NauSortOrder::Ascending);
 
-    m_fileOperationMenu->setProjectDir(m_projectRootDir);
+    m_fileOperationMenu->setProtectedDirs({
+        m_projectRootDir,
+        NauDir(project.defaultContentFolder()),
+        NauDir(project.defaultSourceFolder()),
+    });
     m_tree->setItemDelegate(m_treeDelegate.get());
 
     // Note that we clear indentation of tree itself, for our delegate can handle this.
@@ -636,6 +640,54 @@ void NauProjectBrowser::handleSourceDirChanged()
     emit eventSourceChanged(m_projectSourceDir);
 
     installSourceDirWatcher();
+}
+
+bool NauProjectBrowser::checkNoUndeletableContent(const QModelIndexList& indexes)
+{
+    QStringList protectedDirs;
+    for (const QModelIndex& index : indexes) {
+        const QString path = index.data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
+        if (m_fsProxy->containsUndeletableItems(path)) {
+            protectedDirs << QDir::toNativeSeparators(m_projectRootDir.relativeFilePath(path));
+        }
+    }
+
+    if (protectedDirs.isEmpty()) return true;
+
+    NED_WARNING("Operation declined: {} contain(s) items that cannot be moved or deleted",
+        protectedDirs.join(", ").toUtf8().constData());
+
+    QMessageBox::warning(this, tr("NauEditor"),
+        tr("The following folder(s) contain scenes or other items that cannot be moved or deleted:\n%1")
+            .arg(protectedDirs.join("\n")));
+
+    return false;
+}
+
+bool NauProjectBrowser::checkNoSharedAssetSources(const QModelIndexList& indexes)
+{
+    QStringList selectedPaths;
+    for (const QModelIndex& index : indexes) {
+        selectedPaths << index.data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
+    }
+
+    QStringList sharingAssets;
+    for (const QString& path : selectedPaths) {
+        if (!NauFileOperations::assetsSharingSource(path, selectedPaths).isEmpty()) {
+            sharingAssets << QDir::toNativeSeparators(m_projectRootDir.relativeFilePath(path));
+        }
+    }
+
+    if (sharingAssets.isEmpty()) return true;
+
+    NED_WARNING("Operation declined: {} share(s) source file with other assets",
+        sharingAssets.join(", ").toUtf8().constData());
+
+    QMessageBox::warning(this, tr("NauEditor"),
+        tr("The following item(s) share a source file with other assets and cannot be moved separately:\n%1")
+            .arg(sharingAssets.join("\n")));
+
+    return false;
 }
 
 std::vector<NauEditorFileType> NauProjectBrowser::filterableItemTypes()

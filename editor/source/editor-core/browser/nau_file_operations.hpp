@@ -8,6 +8,9 @@
 #include "nau/nau_editor_config.hpp"
 
 #include <QModelIndexList>
+#include <QStringList>
+
+#include <functional>
 
 
 // ** NauFileOperations
@@ -15,12 +18,34 @@
 class NAU_EDITOR_API NauFileOperations
 {
 public:
+    // Meta file format is known to the asset system only, so it provides the operations on meta files.
+    struct AssetMetaOperations
+    {
+        // Returns the declared source path, including a missing source; empty means no source.
+        std::function<QString(const QString& metaFilePath)> sourcePath;
+    };
+
+    static void setAssetMetaOperations(AssetMetaOperations operations);
+
     static void copyToClipboard(const QModelIndexList& indexes);
     static void cutToClipboard(const QModelIndexList& indexes);
-    static void pasteFromClipboard(const QModelIndex& parent);
+    // Keeps the clipboard unchanged on failure.
+    static bool pasteFromClipboard(const QModelIndex& parent);
 
-    // Moves specified path to trash. 
-    static bool deletePathRecursively(const QString& path);
+    // Moves each item to trash intact; rolls back completed moves on failure.
+    static bool moveToTrash(const QStringList& paths);
+
+    // Includes sources unless referenced by unselected assets.
+    static bool moveAssetsToTrash(const QStringList& paths);
+
+    // Supports cross-volume moves; rolls back completed steps on failure.
+    static bool movePaths(const QStringList& srcPaths, const QString& dstDir);
+
+    // Returns the declared source path, even if missing; empty means no source.
+    static QString assetSourcePath(const QString& path);
+
+    // Finds other meta files referencing the same source, excluding ignored paths.
+    static QStringList assetsSharingSource(const QString& path, const QStringList& ignored = {});
 
     static void duplicate(const QModelIndexList& indexes);
 
@@ -39,10 +64,13 @@ public:
     static QString generateFileName(const QString& baseFileName);
 
 private:
+    static AssetMetaOperations m_assetMetaOperations;
+
+    static bool isAssetMetaFile(const QString& path);
+
     static QString cutOperationMimeType();
     static QByteArray copyDropEffectData();
     static QByteArray cutDropEffectData();
 
     static QMimeData* prepareCopyCut(const QModelIndexList& indexes);
-    static bool movePathRecursively(const QString& src, const QString& dst);
 };

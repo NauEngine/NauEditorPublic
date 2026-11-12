@@ -45,8 +45,8 @@ void NauProjectBrowserFileOperationsMenu::watch(QAbstractItemView* view)
         if (selection.isEmpty()) return;
 
         for (const auto& index : m_views[view].selection) {
-            if (isProjectDir(index)) {
-                NED_ERROR("Project dir cannot be copied");
+            if (isProtectedDir(index)) {
+                NED_ERROR("Protected dir cannot be copied");
                 return;
             }
         }
@@ -61,7 +61,7 @@ void NauProjectBrowserFileOperationsMenu::watch(QAbstractItemView* view)
         for (const auto& index : m_views[view].selection) {
             if (index.flags().testFlag(Qt::ItemIsEditable) && 
                 !index.flags().testFlag(Qt::ItemFlag(NauProjectFileSystemProxyModel::ItemIsUndeletable)) &&
-                !isProjectDir(index)) {
+                !isProtectedDir(index)) {
                 editableIndexes << index;
             }
         }
@@ -81,8 +81,8 @@ void NauProjectBrowserFileOperationsMenu::watch(QAbstractItemView* view)
         if (selection.isEmpty()) return;
 
         for (const auto& index : selection) {
-            if (isProjectDir(index)) {
-                NED_ERROR("Project dir cannot be duplicated");
+            if (isProtectedDir(index)) {
+                NED_ERROR("Protected dir cannot be duplicated");
                 return;
             }
         }
@@ -123,8 +123,8 @@ void NauProjectBrowserFileOperationsMenu::watch(QAbstractItemView* view)
             return;
         }
 
-        if (isProjectDir(current)) {
-            NED_WARNING("Renaming of project directory not implemented");
+        if (isProtectedDir(current)) {
+            NED_WARNING("Protected dir cannot be renamed");
             return;
         }
 
@@ -139,7 +139,7 @@ void NauProjectBrowserFileOperationsMenu::watch(QAbstractItemView* view)
         for (const auto& index : m_views[view].selection) {
             if (index.flags().testFlag(Qt::ItemIsEditable) && 
                 !index.flags().testFlag(Qt::ItemFlag(NauProjectFileSystemProxyModel::ItemIsUndeletable)) &&
-                !isProjectDir(index)) {
+                !isProtectedDir(index)) {
                 editableIndexes << index;
             }
         }
@@ -218,7 +218,7 @@ void NauProjectBrowserFileOperationsMenu::enumerateActionsFor(QAbstractItemView*
     const bool isOnlyItem = indexes.size() == 1;
     const bool hasFileInClipboard = QApplication::clipboard()->mimeData() && QApplication::clipboard()->mimeData()->hasUrls();
 
-    bool hasProjectDir = false;
+    bool hasProtectedDir = false;
     bool allReadonly = true;
     bool allDeletable = true;
     bool isDirOnly = true;
@@ -240,8 +240,8 @@ void NauProjectBrowserFileOperationsMenu::enumerateActionsFor(QAbstractItemView*
             }
         }
 
-        if (!hasProjectDir && isProjectDir(index)) {
-            hasProjectDir = true;
+        if (!hasProtectedDir && isProtectedDir(index)) {
+            hasProtectedDir = true;
         }
     }
 
@@ -262,7 +262,7 @@ void NauProjectBrowserFileOperationsMenu::enumerateActionsFor(QAbstractItemView*
         menu.addAction(data.actions[NauShortcutOperation::ProjectBrowserCreateDir]);
     }
 
-    if (haveSelection && !hasProjectDir) {
+    if (haveSelection && !hasProtectedDir) {
         menu.addAction(data.actions[NauShortcutOperation::ProjectBrowserCopy]);
 
         if (!allReadonly && allDeletable) {
@@ -276,7 +276,7 @@ void NauProjectBrowserFileOperationsMenu::enumerateActionsFor(QAbstractItemView*
         menu.addAction(data.actions[NauShortcutOperation::ProjectBrowserPaste]);
     }
 
-    if (haveSelection && !allReadonly && !hasProjectDir) {
+    if (haveSelection && !allReadonly && !hasProtectedDir) {
         if (isOnlyItem) {
             menu.addAction(data.actions[NauShortcutOperation::ProjectBrowserRename]);
         }
@@ -309,9 +309,9 @@ void NauProjectBrowserFileOperationsMenu::updateViewSelectionData(QAbstractItemV
 
 }
 
-void NauProjectBrowserFileOperationsMenu::setProjectDir(const NauDir& projectDir)
+void NauProjectBrowserFileOperationsMenu::setProtectedDirs(const QList<NauDir>& protectedDirs)
 {
-    m_projectDir = projectDir;
+    m_protectedDirs = protectedDirs;
 }
 
 bool NauProjectBrowserFileOperationsMenu::isValidDir(const QModelIndex& index)
@@ -322,7 +322,7 @@ bool NauProjectBrowserFileOperationsMenu::isValidDir(const QModelIndex& index)
     return QFileInfo{index.data(NauProjectBrowserFileSystemModel::FilePathRole).toString()}.isDir();
 }
 
-bool NauProjectBrowserFileOperationsMenu::isProjectDir(const QModelIndex& index) const
+bool NauProjectBrowserFileOperationsMenu::isProtectedDir(const QModelIndex& index) const
 {
-    return NauDir{index.data(NauProjectBrowserFileSystemModel::FilePathRole).toString()} == m_projectDir;
+    return m_protectedDirs.contains(NauDir{index.data(NauProjectBrowserFileSystemModel::FilePathRole).toString()});
 }
