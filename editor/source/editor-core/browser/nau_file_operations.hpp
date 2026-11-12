@@ -8,6 +8,7 @@
 #include "nau/nau_editor_config.hpp"
 
 #include <QModelIndexList>
+#include <QStringList>
 
 #include <functional>
 
@@ -28,16 +29,23 @@ public:
 
     static void copyToClipboard(const QModelIndexList& indexes);
     static void cutToClipboard(const QModelIndexList& indexes);
-    static void pasteFromClipboard(const QModelIndex& parent);
+    // Keeps the clipboard unchanged on failure.
+    static bool pasteFromClipboard(const QModelIndex& parent);
 
-    // Moves specified file or directory to trash as a single item, so it can be restored as a whole.
-    // Returns false if path doesn't exist or can't be moved (e.g. some file is locked).
-    static bool moveToTrash(const QString& path);
+    // Moves each item to trash intact; rolls back completed moves on failure.
+    static bool moveToTrash(const QStringList& paths);
 
-    // Returns source file that specified asset meta file refers to.
-    // Returns the declared path even if the source is missing; empty means no source (e.g. materials).
-    // Note that project browser shows meta files only, so their sources must follow them on moving and deleting.
+    // Includes sources unless referenced by unselected assets.
+    static bool moveAssetsToTrash(const QStringList& paths);
+
+    // Supports cross-volume moves; rolls back completed steps on failure.
+    static bool movePaths(const QStringList& srcPaths, const QString& dstDir);
+
+    // Returns the declared source path, even if missing; empty means no source.
     static QString assetSourcePath(const QString& path);
+
+    // Finds other meta files referencing the same source, excluding ignored paths.
+    static QStringList assetsSharingSource(const QString& path, const QStringList& ignored = {});
 
     static void duplicate(const QModelIndexList& indexes);
 
@@ -65,5 +73,4 @@ private:
     static QByteArray cutDropEffectData();
 
     static QMimeData* prepareCopyCut(const QModelIndexList& indexes);
-    static bool movePathRecursively(const QString& src, const QString& dst);
 };

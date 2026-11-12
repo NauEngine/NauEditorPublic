@@ -223,12 +223,15 @@ NauProjectBrowser::NauProjectBrowser(NauShortcutHub* shortcutHub, NauWidget* par
         });
 
         setCursor(Qt::CursorShape::BusyCursor);
-        NauFileOperations::pasteFromClipboard(parent);
+        if (!NauFileOperations::pasteFromClipboard(parent)) {
+            QMessageBox::warning(this, tr("NauEditor"),
+                tr("Failed to paste the item(s). They may be in use, or the items with the same names already exist in the destination folder."));
+        }
     });
 
     connect(m_fileOperationMenu.get(), &NauProjectBrowserFileOperationsMenu::eventCutRequested,
         [this](const QModelIndexList& indexes) {
-        if (!checkNoUndeletableContent(indexes)) return;
+        if (!checkNoUndeletableContent(indexes) || !checkNoSharedAssetSources(indexes)) return;
 
         NauFileOperations::cutToClipboard(indexes);
     });
@@ -284,32 +287,13 @@ NauProjectBrowser::NauProjectBrowser(NauShortcutHub* shortcutHub, NauWidget* par
             return;
         }
 
-        QStringList failedFileList;
-        for (const auto& file : delFileList) {
-            // Note that it's a bad idea to remove resource via WinAPI
-            // Underlying Qt's FS model installs the watchers that can lead to files to be locked on Windows.
-            const QModelIndex fsModelIndex = m_fsModel->index(file);
-            const QString path = fsModelIndex.data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
-
-            // Source is removed first: otherwise it will be imported again with a new meta file.
-            const QString sourcePath = NauFileOperations::assetSourcePath(path);
-            const bool result = (sourcePath.isEmpty() || NauFileOperations::moveToTrash(sourcePath))
-                && NauFileOperations::moveToTrash(path);
-
-            if (!result) {
-                NED_ERROR("Failed to move to trash {}", file.toUtf8().constData());
-                failedFileList << QDir::toNativeSeparators(m_projectRootDir.relativeFilePath(file));
-            } else {
-                NED_TRACE("Successfully moved to trash {}", file.toUtf8().constData());
-            }
-        }
+        const bool result = NauFileOperations::moveAssetsToTrash(delFileList);
 
         setCurrentDirInList(m_tree->currentIndex());
 
-        if (!failedFileList.isEmpty()) {
+        if (!result) {
             QMessageBox::warning(this, tr("NauEditor"),
-                tr("Failed to move the following item(s) to trash. They may be in use by the editor or another program:\n%1")
-                    .arg(failedFileList.join("\n")));
+                tr("Failed to move the selected item(s) to trash. They may be in use by the editor or another program."));
         }
     });
 
@@ -676,6 +660,32 @@ bool NauProjectBrowser::checkNoUndeletableContent(const QModelIndexList& indexes
     QMessageBox::warning(this, tr("NauEditor"),
         tr("The following folder(s) contain scenes or other items that cannot be moved or deleted:\n%1")
             .arg(protectedDirs.join("\n")));
+
+    return false;
+}
+
+bool NauProjectBrowser::checkNoSharedAssetSources(const QModelIndexList& indexes)
+{
+    QStringList selectedPaths;
+    for (const QModelIndex& index : indexes) {
+        selectedPaths << index.data(NauProjectBrowserFileSystemModel::FilePathRole).toString();
+    }
+
+    QStringList sharingAssets;
+    for (const QString& path : selectedPaths) {
+        if (!NauFileOperations::assetsSharingSource(path, selectedPaths).isEmpty()) {
+            sharingAssets << QDir::toNativeSeparators(m_projectRootDir.relativeFilePath(path));
+        }
+    }
+
+    if (sharingAssets.isEmpty()) return true;
+
+    NED_WARNING("Operation declined: {} share(s) source file with other assets",
+        sharingAssets.join(", ").toUtf8().constData());
+
+    QMessageBox::warning(this, tr("NauEditor"),
+        tr("The following item(s) share a source file with other assets and cannot be moved separately:\n%1")
+            .arg(sharingAssets.join("\n")));
 
     return false;
 }

@@ -10,6 +10,10 @@
 #include <QFileSystemWatcher>
 #include <QTemporaryDir>
 
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#endif
+
 
 namespace
 {
@@ -250,7 +254,7 @@ TEST(NauFileOperationsTests, moveToTrashNonExistentPath)
     ASSERT_TRUE(tempDir.isValid());
 
     // Act
-    const bool result = NauFileOperations::moveToTrash(tempDir.filePath("missing"));
+    const bool result = NauFileOperations::moveToTrash({tempDir.filePath("missing")});
 
     // Assert
     EXPECT_FALSE(result);
@@ -266,7 +270,7 @@ TEST(NauFileOperationsTests, moveToTrashDirectoryWithContent)
     ASSERT_TRUE(createFile(dirPath + "/sub/subsub/file.txt"));
 
     // Act
-    const bool result = NauFileOperations::moveToTrash(dirPath);
+    const bool result = NauFileOperations::moveToTrash({dirPath});
 
     // Assert
     EXPECT_TRUE(result);
@@ -319,8 +323,238 @@ TEST(NauFileOperationsTests, moveToTrashWatchedDirectoryReportsFailure)
     watcher.addPaths({dirPath, dirPath + "/sub"});
 
     // Act
-    const bool result = NauFileOperations::moveToTrash(dirPath);
+    const bool result = NauFileOperations::moveToTrash({dirPath});
 
     // Assert
     EXPECT_EQ(result, !QFileInfo::exists(dirPath));
 }
+
+TEST_F(NauFileOperationsAssetTests, assetsSharingSourceFindsOtherMetaFiles)
+{
+    // Arrange
+    const QString firstMetaFilePath = tempDir.filePath("first.nausd");
+    const QString secondMetaFilePath = tempDir.filePath("second.nausd");
+    ASSERT_TRUE(createFile(tempDir.filePath("texture.png")));
+    ASSERT_TRUE(createFile(tempDir.filePath("other.png")));
+    ASSERT_TRUE(createMetaFile(firstMetaFilePath, "texture.png"));
+    ASSERT_TRUE(createMetaFile(secondMetaFilePath, "texture.png"));
+    ASSERT_TRUE(createMetaFile(tempDir.filePath("other.nausd"), "other.png"));
+
+    // Act
+    const QStringList result = NauFileOperations::assetsSharingSource(firstMetaFilePath);
+
+    // Assert
+    EXPECT_EQ(result, QStringList{secondMetaFilePath});
+}
+
+TEST_F(NauFileOperationsAssetTests, assetsSharingSourceSkipsIgnoredMetaFiles)
+{
+    // Arrange
+    const QString firstMetaFilePath = tempDir.filePath("first.nausd");
+    const QString secondMetaFilePath = tempDir.filePath("second.nausd");
+    ASSERT_TRUE(createFile(tempDir.filePath("texture.png")));
+    ASSERT_TRUE(createMetaFile(firstMetaFilePath, "texture.png"));
+    ASSERT_TRUE(createMetaFile(secondMetaFilePath, "texture.png"));
+
+    // Act
+    const QStringList result = NauFileOperations::assetsSharingSource(firstMetaFilePath, {firstMetaFilePath, secondMetaFilePath});
+
+    // Assert
+    EXPECT_TRUE(result.isEmpty());
+}
+
+TEST(NauFileOperationsTests, moveToTrashRestoresItemsOnFailure)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString filePath = tempDir.filePath("file.txt");
+    const QString dirPath = tempDir.filePath("folder");
+    ASSERT_TRUE(createFile(filePath));
+    ASSERT_TRUE(createFile(dirPath + "/sub/file.txt"));
+
+    // Act
+    const bool result = NauFileOperations::moveToTrash({filePath, dirPath, tempDir.filePath("missing")});
+
+    // Assert
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(QFileInfo::exists(filePath));
+    EXPECT_TRUE(QFileInfo::exists(dirPath + "/sub/file.txt"));
+}
+
+TEST(NauFileOperationsTests, movePathsMovesFilesAndDirectories)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString filePath = tempDir.filePath("file.txt");
+    const QString dirPath = tempDir.filePath("folder");
+    const QString dstPath = tempDir.filePath("dst");
+    ASSERT_TRUE(createFile(filePath));
+    ASSERT_TRUE(createFile(dirPath + "/sub/file.txt"));
+    ASSERT_TRUE(QDir().mkpath(dstPath));
+
+    // Act
+    const bool result = NauFileOperations::movePaths({filePath, dirPath}, dstPath);
+
+    // Assert
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(QFileInfo::exists(dstPath + "/file.txt"));
+    EXPECT_TRUE(QFileInfo::exists(dstPath + "/folder/sub/file.txt"));
+    EXPECT_FALSE(QFileInfo::exists(filePath));
+    EXPECT_FALSE(QFileInfo::exists(dirPath));
+}
+
+TEST(NauFileOperationsTests, movePathsReturnsItemsBackOnFailure)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString firstPath = tempDir.filePath("first.txt");
+    const QString secondPath = tempDir.filePath("second.txt");
+    const QString dstPath = tempDir.filePath("dst");
+    ASSERT_TRUE(createFile(firstPath));
+    ASSERT_TRUE(createFile(secondPath));
+    ASSERT_TRUE(createMetaFile(dstPath + "/second.txt", "occupied"));
+
+    // Act
+    const bool result = NauFileOperations::movePaths({firstPath, secondPath}, dstPath);
+
+    // Assert
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(QFileInfo::exists(firstPath));
+    EXPECT_TRUE(QFileInfo::exists(secondPath));
+    EXPECT_FALSE(QFileInfo::exists(dstPath + "/first.txt"));
+    EXPECT_EQ(readFile(dstPath + "/second.txt"), QByteArray("occupied"));
+}
+
+TEST(NauFileOperationsTests, movePathsReturnsDirectoryBackOnFailure)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString dirPath = tempDir.filePath("folder");
+    const QString dstPath = tempDir.filePath("dst");
+    ASSERT_TRUE(createFile(dirPath + "/sub/moved.txt"));
+    ASSERT_TRUE(createFile(dirPath + "/occupied.txt"));
+    ASSERT_TRUE(createFile(dstPath + "/folder/occupied.txt"));
+
+    // Act
+    const bool result = NauFileOperations::movePaths({dirPath}, dstPath);
+
+    // Assert
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(QFileInfo::exists(dirPath + "/sub/moved.txt"));
+    EXPECT_TRUE(QFileInfo::exists(dirPath + "/occupied.txt"));
+    EXPECT_FALSE(QFileInfo::exists(dstPath + "/folder/sub"));
+}
+
+TEST(NauFileOperationsTests, movePathsToSameDirectoryChangesNothing)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString filePath = tempDir.filePath("file.txt");
+    ASSERT_TRUE(createFile(filePath));
+
+    // Act
+    const bool result = NauFileOperations::movePaths({filePath}, tempDir.path());
+
+    // Assert
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(QFileInfo::exists(filePath));
+}
+
+TEST(NauFileOperationsTests, movePathsToOwnSubdirectoryFails)
+{
+    // Arrange
+    const QTemporaryDir tempDir;
+    ASSERT_TRUE(tempDir.isValid());
+    const QString dirPath = tempDir.filePath("folder");
+    ASSERT_TRUE(createFile(dirPath + "/sub/file.txt"));
+
+    // Act
+    const bool result = NauFileOperations::movePaths({dirPath}, dirPath + "/sub");
+
+    // Assert
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(QFileInfo::exists(dirPath + "/sub/file.txt"));
+}
+
+TEST_F(NauFileOperationsAssetTests, trashSelectionKeepsSourceUsedByUnselectedAsset)
+{
+    const QString source = tempDir.filePath("texture.png");
+    const QString first = tempDir.filePath("texture.png.nausd");
+    const QString second = tempDir.filePath("copy.png.nausd");
+    ASSERT_TRUE(createFile(source));
+    ASSERT_TRUE(createMetaFile(first, "texture.png\nfirst uid"));
+    ASSERT_TRUE(createMetaFile(second, "texture.png\nsecond uid"));
+
+    EXPECT_TRUE(NauFileOperations::moveAssetsToTrash({first}));
+    EXPECT_FALSE(QFileInfo::exists(first));
+    EXPECT_TRUE(QFileInfo::exists(source));
+    EXPECT_EQ(readFile(second), QByteArray("texture.png\nsecond uid"));
+}
+
+TEST_F(NauFileOperationsAssetTests, trashSelectionRemovesSharedSourceOnce)
+{
+    const QString source = tempDir.filePath("texture.png");
+    const QString first = tempDir.filePath("texture.png.nausd");
+    const QString second = tempDir.filePath("copy.png.nausd");
+    ASSERT_TRUE(createFile(source));
+    ASSERT_TRUE(createMetaFile(first, "texture.png\nfirst uid"));
+    ASSERT_TRUE(createMetaFile(second, "texture.png\nsecond uid"));
+
+    EXPECT_TRUE(NauFileOperations::moveAssetsToTrash({first, second}));
+    EXPECT_FALSE(QFileInfo::exists(source));
+    EXPECT_FALSE(QFileInfo::exists(first));
+    EXPECT_FALSE(QFileInfo::exists(second));
+}
+
+TEST_F(NauFileOperationsAssetTests, trashSelectionRestoresSharedSourceWhenLaterItemFails)
+{
+    const QString source = tempDir.filePath("texture.png");
+    const QString first = tempDir.filePath("texture.png.nausd");
+    const QString second = tempDir.filePath("copy.png.nausd");
+    ASSERT_TRUE(createFile(source));
+    ASSERT_TRUE(createMetaFile(first, "texture.png\nfirst uid"));
+    ASSERT_TRUE(createMetaFile(second, "texture.png\nsecond uid"));
+
+    // The last item disappeared after selection. Earlier deletions must be rolled back.
+    ASSERT_TRUE(QFile::remove(second));
+    EXPECT_FALSE(NauFileOperations::moveAssetsToTrash({first, second}));
+    EXPECT_EQ(readFile(source), QByteArray("nau"));
+    EXPECT_EQ(readFile(first), QByteArray("texture.png\nfirst uid"));
+}
+
+TEST_F(NauFileOperationsAssetTests, trashSelectionAllowsRemovingMetaWithMissingSource)
+{
+    const QString meta = tempDir.filePath("texture.png.nausd");
+    ASSERT_TRUE(createMetaFile(meta, "texture.png\nold uid"));
+
+    EXPECT_TRUE(NauFileOperations::moveAssetsToTrash({meta}));
+    EXPECT_FALSE(QFileInfo::exists(meta));
+}
+
+#ifdef Q_OS_WIN
+TEST_F(NauFileOperationsAssetTests, trashSelectionRestoresSharedSourceWhenSecondMetaIsLocked)
+{
+    const QString source = tempDir.filePath("texture.png");
+    const QString first = tempDir.filePath("texture.png.nausd");
+    const QString second = tempDir.filePath("copy.png.nausd");
+    ASSERT_TRUE(createFile(source));
+    ASSERT_TRUE(createMetaFile(first, "texture.png\nfirst uid"));
+    ASSERT_TRUE(createMetaFile(second, "texture.png\nsecond uid"));
+
+    const HANDLE lock = CreateFileW(second.toStdWString().c_str(), GENERIC_READ,
+        FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    ASSERT_NE(lock, INVALID_HANDLE_VALUE);
+    const bool result = NauFileOperations::moveAssetsToTrash({first, second});
+    CloseHandle(lock);
+
+    EXPECT_FALSE(result);
+    EXPECT_EQ(readFile(source), QByteArray("nau"));
+    EXPECT_EQ(readFile(first), QByteArray("texture.png\nfirst uid"));
+    EXPECT_EQ(readFile(second), QByteArray("texture.png\nsecond uid"));
+}
+#endif
