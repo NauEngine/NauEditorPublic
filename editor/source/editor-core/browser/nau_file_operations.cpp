@@ -12,8 +12,17 @@
 #include <QMimeData>
 #include <QUrl>
 
+#include <utility>
+
 
 // ** NauFileOperations
+
+NauFileOperations::AssetMetaOperations NauFileOperations::m_assetMetaOperations;
+
+void NauFileOperations::setAssetMetaOperations(AssetMetaOperations operations)
+{
+    m_assetMetaOperations = std::move(operations);
+}
 
 void NauFileOperations::copyToClipboard(const QModelIndexList& indexes)
 {
@@ -254,11 +263,13 @@ bool NauFileOperations::moveToTrash(const QString& path)
 
 QString NauFileOperations::assetSourcePath(const QString& path)
 {
-    static const auto assetMetaFileExtension = QStringLiteral(".nausd");
+    if (!isAssetMetaFile(path) || !m_assetMetaOperations.sourcePath) return QString();
 
-    if (!path.endsWith(assetMetaFileExtension, Qt::CaseInsensitive)) return QString();
+    return m_assetMetaOperations.sourcePath(path);
+}
 
-    const QString sourcePath = path.chopped(assetMetaFileExtension.size());
-    return QFileInfo{sourcePath}.isFile() ? sourcePath : QString();
+bool NauFileOperations::isAssetMetaFile(const QString& path)
+{
+    return path.endsWith(QStringLiteral(".nausd"), Qt::CaseInsensitive);
 }
 

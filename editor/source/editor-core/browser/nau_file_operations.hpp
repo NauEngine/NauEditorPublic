@@ -9,12 +9,23 @@
 
 #include <QModelIndexList>
 
+#include <functional>
+
 
 // ** NauFileOperations
 
 class NAU_EDITOR_API NauFileOperations
 {
 public:
+    // Meta file format is known to the asset system only, so it provides the operations on meta files.
+    struct AssetMetaOperations
+    {
+        // Returns the declared source path, including a missing source; empty means no source.
+        std::function<QString(const QString& metaFilePath)> sourcePath;
+    };
+
+    static void setAssetMetaOperations(AssetMetaOperations operations);
+
     static void copyToClipboard(const QModelIndexList& indexes);
     static void cutToClipboard(const QModelIndexList& indexes);
     static void pasteFromClipboard(const QModelIndex& parent);
@@ -23,8 +34,8 @@ public:
     // Returns false if path doesn't exist or can't be moved (e.g. some file is locked).
     static bool moveToTrash(const QString& path);
 
-    // Returns source file of specified asset meta file, e.g. 'texture.png' for 'texture.png.nausd'.
-    // Returns empty string if path is not a meta file or there is no source file next to it (e.g. materials).
+    // Returns source file that specified asset meta file refers to.
+    // Returns the declared path even if the source is missing; empty means no source (e.g. materials).
     // Note that project browser shows meta files only, so their sources must follow them on moving and deleting.
     static QString assetSourcePath(const QString& path);
 
@@ -45,6 +56,10 @@ public:
     static QString generateFileName(const QString& baseFileName);
 
 private:
+    static AssetMetaOperations m_assetMetaOperations;
+
+    static bool isAssetMetaFile(const QString& path);
+
     static QString cutOperationMimeType();
     static QByteArray copyDropEffectData();
     static QByteArray cutDropEffectData();
