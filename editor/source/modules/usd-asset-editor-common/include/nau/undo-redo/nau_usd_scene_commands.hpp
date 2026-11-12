@@ -9,10 +9,12 @@
 #include "commands/nau_commands.hpp"
 
 #include "pxr/usd/usd/stage.h"
+#include "pxr/usd/sdf/layer.h"
 #include "pxr/base/gf/matrix4d.h"
 
 #include "usd_proxy/usd_proxy.h"
 
+#include <optional>
 #include <string>
 
 
@@ -48,7 +50,7 @@ public:
     NauCommandDescriptor description() const override;
 
 private:
-    const PXR_NS::GfMatrix4d& m_initialTransform;
+    const PXR_NS::GfMatrix4d m_initialTransform;
     const std::string m_typeName;
     const std::string m_displayName;
     const std::string m_path;
@@ -68,8 +70,9 @@ public:
     NauCommandDescriptor description() const override;
 
 private:
-    std::string m_typeName;
-    std::string m_displayName;
+    // Copy of the removed prim spec (with attributes, metadata and children) taken from the root layer
+    PXR_NS::SdfLayerRefPtr m_removedSpec;
+    std::optional<size_t> m_siblingIndex;
     const std::string m_path;
 };
 
@@ -154,6 +157,9 @@ private:
 private:
     PXR_NS::VtValue m_initialValue;
     PXR_NS::VtValue m_value;
+
+    // Root layer "references" field before execute; restored by undo when no initial value was given
+    PXR_NS::VtValue m_previousReferences;
 
     const PXR_NS::SdfPath m_path;
 };

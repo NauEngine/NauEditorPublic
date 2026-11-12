@@ -98,6 +98,18 @@ bool NauUsdPrimUtils::isPrimComponent(pxr::UsdPrim prim)
     return (pxr::KindRegistry::IsComponent(kindToken) || pxr::KindRegistry::IsSubComponent(kindToken));
 }
 
+std::string NauUsdPrimUtils::creationTypeName(pxr::UsdPrim prim)
+{
+    if (pxr::UsdAttribute attr = prim.GetAttribute(pxr::TfToken("componentTypeName"))) {
+        std::string componentTypeName;
+        if (attr.Get(&componentTypeName) && !componentTypeName.empty()) {
+            return componentTypeName;
+        }
+    }
+
+    return prim.GetTypeName().GetString();
+}
+
 PXR_NS::UsdGeomXformOp NauUsdPrimUtils::forceAddTransformOpOrder(PXR_NS::UsdGeomXformable& xformable)
 {
     PXR_NS::UsdGeomXformCache cache;

@@ -50,6 +50,10 @@ public:
 
     static bool isPrimComponent(pxr::UsdPrim prim);
 
+    // Type name to pass to NauUsdPrimFactory to create a prim like this one.
+    // All components are typed NauComponent; the factory knows them by their engine class name (componentTypeName).
+    static std::string creationTypeName(pxr::UsdPrim prim);
+
     // Deletes prim xFormOpOrder and creates a new one from one operation - transformOp
     static PXR_NS::UsdGeomXformOp forceAddTransformOpOrder(PXR_NS::UsdGeomXformable& xformable);
 
