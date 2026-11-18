@@ -15,7 +15,10 @@
 #include "nau/prim-factory/nau_usd_prim_factory.hpp"
 #include "nau/prim-factory/nau_usd_prim_creator.hpp"
 
+#include <algorithm>
 #include <memory>
+#include <utility>
+#include <vector>
 #include "nau/shared/file_system.h"
 
 // ** Helper functions
@@ -306,9 +309,38 @@ void NauUsdInspectorClient::buildProperties(const UsdProxy::UsdProxyPrim& proxyP
     }
     
     
-    for (auto prop : proxyPrim.getProperties()) {
-        // Skip the colorRGBA property for the Button component
-        if (prop.second->getName() == pxr::TfToken("colorRGBA") && proxyPrim.getPrim().GetTypeName() == pxr::TfToken("NauGuiButton")) {
+    // Properties are iterated in alphabetical order, which scatters the corner
+    // offsets of a DrawNode across the inspector. Group them together.
+    const std::vector<pxr::TfToken> cornerPropertyNames = {
+        pxr::TfToken("bottomLeftCorner"),
+        pxr::TfToken("bottomRightCorner"),
+        pxr::TfToken("upperLeftCorner"),
+        pxr::TfToken("upperRightCorner")
+    };
+
+    const UsdProxy::UsdProxyPropertyMap proxyProperties = proxyPrim.getProperties();
+
+    std::vector<std::pair<pxr::TfToken, UsdProxy::UsdProxyPropertyPtr>> properties;
+    properties.reserve(proxyProperties.size());
+    for (const pxr::TfToken& cornerName : cornerPropertyNames) {
+        if (auto it = proxyProperties.find(cornerName); it != proxyProperties.end()) {
+            properties.emplace_back(*it);
+        }
+    }
+    for (const auto& prop : proxyProperties) {
+        if (std::find(cornerPropertyNames.begin(), cornerPropertyNames.end(), prop.first) == cornerPropertyNames.end()) {
+            properties.emplace_back(prop);
+        }
+    }
+
+    for (auto prop : properties) {
+        // Skip the colorRGBA property for components where it has no effect:
+        // the Button color is defined by default/hovered/clicked/disable colors,
+        // the DrawNode appearance is defined by borderColorRGBA/fillColorRGBA
+        const auto primTypeName = proxyPrim.getPrim().GetTypeName();
+        if (prop.second->getName() == pxr::TfToken("colorRGBA") &&
+            (primTypeName == pxr::TfToken("NauGuiButton") || primTypeName == pxr::TfToken("NauGuiDrawNode")))
+        {
             continue;
         }
 
