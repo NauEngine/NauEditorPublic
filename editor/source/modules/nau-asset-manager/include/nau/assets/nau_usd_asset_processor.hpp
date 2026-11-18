@@ -1,4 +1,4 @@
-﻿// Copyright 2024 N-GINN LLC. All rights reserved.
+// Copyright 2024 N-GINN LLC. All rights reserved.
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 //
 // Usd asset manager implementation
@@ -23,6 +23,7 @@ public:
     ~NauUsdAssetProcessor() = default;
     void setAssetFileUid(const std::filesystem::path& assetSource) override;
     int importAsset(const std::filesystem::path& project, const std::filesystem::path& assetSource) override;
+    bool ensureUniqueUid(const std::filesystem::path& assetPath) override;
     std::string sourcePathFromAssetFile(const std::string& assetPath) override;
 
     std::string_view assetFileFilter() const override;

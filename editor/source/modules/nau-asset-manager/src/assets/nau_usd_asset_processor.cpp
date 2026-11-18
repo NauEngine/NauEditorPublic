@@ -12,11 +12,22 @@
 #include "pxr/usd/sdf/listEditorProxy.h"
 #include "nau/assets/nau_file_types.hpp"
 #include "nau/asset_tools/asset_api.h"
+#include "nau/shared/file_system.h"
 
 #include <QApplication>
 #include "nau/usd_meta_tools/usd_meta_info.h"
 
+#include <algorithm>
+#include <format>
+
 #include <pxr/usd/ar/defineResolver.h>
+#include <pxr/usd/usd/stage.h>
+#include <pxr/usd/usd/prim.h>
+#include <pxr/usd/usd/primRange.h>
+#include <pxr/usd/usd/attribute.h>
+#include <pxr/usd/sdf/primSpec.h>
+#include <pxr/base/tf/token.h>
+#include <pxr/base/tf/stringUtils.h>
 
 #include "nau/service/service_provider.h"
 #include "nau/assets/asset_db.h"
@@ -107,6 +118,82 @@ public:
 
 // ** NauUsdAssetProcessor
 
+namespace
+{
+    // Updates the file modification time so that the import job recompiles the asset instead of
+    // treating it as up to date.
+    bool touchFile(const std::filesystem::path& path)
+    {
+        std::error_code ec;
+        std::filesystem::last_write_time(path, std::filesystem::file_time_type::clock::now(), ec);
+        if (ec)
+        {
+            NED_ERROR("Failed to update the modification time of {}: {}", path.string(), ec.message());
+            return false;
+        }
+
+        return true;
+    }
+
+    // Returns the path the import job compares the modification time recorded in the asset database
+    // against to decide whether the asset needs recompilation. Material assets are self-contained,
+    // so their source file is the meta file itself; all the other assets reference their source
+    // file from the meta file.
+    std::string dirtyCheckSourcePath(const std::filesystem::path& assetPath, nau::IAssetDB& assetDb)
+    {
+        nau::UsdMetaInfoArray assetInfo = nau::UsdMetaManager::instance().getInfo(assetPath.string());
+        if (!assetInfo.empty() && assetInfo[0].type == "material")
+        {
+            return assetPath.string();
+        }
+
+        const std::string nausdRelativePath = nau::FileSystemExtensions::getRelativeAssetPath(assetPath, false).string();
+        const eastl::string sourceRelativePath = assetDb.getSourcePathFromNausdPath(nausdRelativePath.c_str());
+
+        std::string sourceAbsolutePath;
+        if (!sourceRelativePath.empty())
+        {
+            sourceAbsolutePath = nau::FileSystemExtensions::resolveToNativePathContentFolder(sourceRelativePath.c_str());
+        }
+
+        std::error_code ec;
+        if (sourceAbsolutePath.empty() || !std::filesystem::exists(sourceAbsolutePath, ec) || std::filesystem::is_directory(sourceAbsolutePath, ec))
+        {
+            // The database has no record of the meta file yet (e.g. it was renamed together with its
+            // source file), so the source file is assumed to have the same path without the meta extension.
+            sourceAbsolutePath = std::filesystem::path(assetPath).replace_extension().string();
+        }
+
+        return sourceAbsolutePath;
+    }
+
+    bool renameAssetPrim(const pxr::UsdStageRefPtr& stage, const pxr::UsdPrim& prim, const std::string& newPrimName)
+    {
+        pxr::SdfPrimSpecHandle primSpec = stage->GetRootLayer()->GetPrimAtPath(prim.GetPath());
+        if (!primSpec || !primSpec->SetName(newPrimName))
+        {
+            NED_WARNING("Failed to rename the asset prim {} to {}", prim.GetPath().GetString(), newPrimName);
+            return false;
+        }
+
+        return true;
+    }
+
+    // New material prims are named after the material file. The same convention is used here so that
+    // material references keep displaying the actual material name.
+    std::string materialPrimName(const std::filesystem::path& assetPath, const std::string& uidSuffix = std::string())
+    {
+        std::string stem = assetPath.stem().string();
+        std::replace(stem.begin(), stem.end(), '(', '_');
+        std::erase(stem, ')');
+
+        // A copied folder keeps the same file names, so a copied material gets a uid suffix in addition
+        // to the file stem to keep its prim name unique.
+        const std::string name = uidSuffix.empty() ? std::format("material_{}", stem) : std::format("material_{}_{}", stem, uidSuffix);
+        return pxr::TfMakeValidIdentifier(name);
+    }
+}  // namespace
+
 void NauUsdAssetProcessor::setAssetFileUid(const std::filesystem::path& assetSource)
 {
     auto stage = pxr::UsdStage::Open(assetSource.string());
@@ -114,23 +201,176 @@ void NauUsdAssetProcessor::setAssetFileUid(const std::filesystem::path& assetSou
         return;
     }
 
-    auto root = stage->GetPseudoRoot();
-    auto children = root.GetAllChildren();
-    if (children.empty()) {
-        return;
-    }
-
-    // TODO: Now we can build only from one NauMaterialPipline
-    auto materialPrim = children.front();
-
-    UsdProxy::UsdProxyPrim proxyPrim(materialPrim);
-    auto proxyProp = proxyPrim.getProperty(pxr::TfToken("uid"));
-    if (proxyProp) {
-        auto uid = nau::Uid::generate();
-        proxyProp->setValue(pxr::VtValue(nau::toString(uid)));
+    for (const pxr::UsdPrim& prim : stage->Traverse())
+    {
+        UsdProxy::UsdProxyPrim proxyPrim(prim);
+        auto proxyProp = proxyPrim.getProperty(pxr::TfToken("uid"));
+        if (proxyProp) {
+            auto uid = nau::Uid::generate();
+            proxyProp->setValue(pxr::VtValue(nau::toString(uid)));
+        }
     }
 
     stage->Save();
+}
+
+bool NauUsdAssetProcessor::ensureUniqueUid(const std::filesystem::path& assetPath)
+{
+    try
+    {
+        auto stage = pxr::UsdStage::Open(assetPath.string(), pxr::UsdStage::LoadNone);
+        if (!stage)
+        {
+            NED_ERROR("Failed to open the asset meta file {}", assetPath.string());
+            return false;
+        }
+
+        nau::IAssetDB& assetDb = nau::getServiceProvider().get<nau::IAssetDB>();
+        const bool isMaterial = createTypeResolver()->resolve(assetPath.string().c_str()).type == NauEditorFileType::Material;
+
+        bool renamedOrMoved = false;
+        std::vector<pxr::UsdPrim> movedUidPrims;
+        std::vector<pxr::UsdPrim> copiedUidPrims;
+
+        for (const pxr::UsdPrim& prim : stage->Traverse())
+        {
+            const pxr::UsdAttribute uidAttr = prim.GetAttribute(pxr::TfToken("uid"));
+            if (!uidAttr)
+            {
+                continue;
+            }
+
+            std::string currentUid;
+            if (!uidAttr.Get(&currentUid))
+            {
+                continue;
+            }
+
+            const auto parsedUid = nau::Uid::parseString(currentUid);
+            if (!parsedUid)
+            {
+                continue;
+            }
+
+            // The uid belongs to the asset this file was copied from only if that asset's file still exists.
+            // An unknown uid means a brand new asset, a missing original file means the asset was renamed or moved:
+            // in both cases the uid must be kept, otherwise references to the asset are lost.
+            const eastl::string registeredNausdPath = assetDb.getNausdPathFromUid(*parsedUid);
+            if (registeredNausdPath.empty())
+            {
+                continue;
+            }
+
+            const std::filesystem::path registeredAssetPath = nau::FileSystemExtensions::resolveToNativePathContentFolder(registeredNausdPath.c_str());
+
+            std::error_code ec;
+            const bool registeredFileExists = std::filesystem::exists(registeredAssetPath, ec);
+            if (ec)
+            {
+                NED_ERROR("Failed to check the asset file registered for the uid {}: {}", currentUid, ec.message());
+                return false;
+            }
+
+            if (!registeredFileExists)
+            {
+                // The asset was renamed or moved: the uid is kept, but the asset must be reimported to update
+                // the path stored in the asset database.
+                renamedOrMoved = true;
+                movedUidPrims.push_back(prim);
+                continue;
+            }
+
+            const bool isSameFile = std::filesystem::equivalent(registeredAssetPath, assetPath, ec);
+            if (ec)
+            {
+                NED_ERROR("Failed to compare the asset file {} with the file registered for the uid {}: {}", assetPath.string(), currentUid, ec.message());
+                return false;
+            }
+
+            if (!isSameFile)
+            {
+                // The file is a copy of a registered asset: its uid must be replaced to keep asset references intact.
+                copiedUidPrims.push_back(prim);
+            }
+        }
+
+        if (renamedOrMoved)
+        {
+            // Renaming keeps the file modification time, so the import job would treat the asset as up to date
+            // and keep the old path in the asset database. Touch the files the import job checks to make the
+            // asset reimport under its new path.
+            if (!touchFile(assetPath))
+            {
+                return false;
+            }
+
+            const std::string sourcePath = dirtyCheckSourcePath(assetPath, assetDb);
+            if (sourcePath != assetPath.string())
+            {
+                std::error_code ec;
+                if (!std::filesystem::exists(sourcePath, ec) || ec)
+                {
+                    NED_WARNING("Source file {} of the renamed asset {} was not found, the asset database will keep the old source path", sourcePath, assetPath.string());
+                }
+                else if (!touchFile(sourcePath))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // A renamed or moved material keeps its uid, but its prim is renamed after the new file,
+        // so material references in mesh settings keep displaying the actual material name.
+        if (renamedOrMoved && isMaterial)
+        {
+            for (const pxr::UsdPrim& prim : movedUidPrims)
+            {
+                renameAssetPrim(stage, prim, materialPrimName(assetPath));
+            }
+        }
+
+        for (const pxr::UsdPrim& prim : copiedUidPrims)
+        {
+            const pxr::UsdAttribute uidAttr = prim.GetAttribute(pxr::TfToken("uid"));
+
+            const std::string newUid = nau::toString(nau::Uid::generate());
+            if (!uidAttr.Set(newUid))
+            {
+                NED_ERROR("Failed to replace a duplicate uid in {}", assetPath.string());
+                return false;
+            }
+
+            NED_INFO("Replaced duplicate uid in {} with {}", assetPath.string(), newUid);
+
+            // The renderer batches material instances by prim name, so a copy with the original prim name
+            // would be drawn with the original material.
+            if (isMaterial)
+            {
+                renameAssetPrim(stage, prim, materialPrimName(assetPath, newUid.substr(0, 8)));
+            }
+        }
+
+        if (!copiedUidPrims.empty() || (renamedOrMoved && isMaterial))
+        {
+            if (!stage->GetRootLayer()->Save())
+            {
+                NED_ERROR("Failed to save the asset meta file {}", assetPath.string());
+                return false;
+            }
+        }
+
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        NED_ERROR("Exception occurred while ensuring a unique uid for {}: {}", assetPath.string(), e.what());
+        return false;
+    }
+    catch (...)
+    {
+        NED_ERROR("Unknown exception occurred while ensuring a unique uid for {}", assetPath.string());
+        return false;
+    }
 }
 
 int NauUsdAssetProcessor::importAsset(const std::filesystem::path& project, const std::filesystem::path& assetSource)

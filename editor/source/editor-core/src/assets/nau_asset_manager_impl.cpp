@@ -5,7 +5,6 @@
 #include "nau_assert.hpp"
 #include "nau_log.hpp"
 
-#include <unordered_set>
 #include "nau/service/service_provider.h"
 #include "nau/shared/file_system.h"
 #include "nau/usd_meta_tools/usd_meta_manager.h"
@@ -151,6 +150,11 @@ void NauAssetManager::onAssetChanged(const std::string& assetPath)
 
 void NauAssetManager::assetAdded(const std::string& assetPath)
 {
+    if (!m_assetProcessor->ensureUniqueUid(assetPath)) {
+        NED_ERROR("Failed to ensure unique uid for {}, import aborted", assetPath);
+        return;
+    }
+
     m_assetProcessor->importAsset(m_projectPath, assetPath);
 
     m_assetDb.reloadAssetDB("assets_database/database.db");
