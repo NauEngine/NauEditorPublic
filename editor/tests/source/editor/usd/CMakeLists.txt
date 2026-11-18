@@ -47,12 +47,6 @@ nau_add_compile_options(NauEditorUsdTests ENABLE_RTTI)
 
 if(MSVC)
     target_compile_options(NauEditorUsdTests PRIVATE "-wd4595")
-
-    # NauUsdAssetEditorCommon logs from static initializers (property widget registration),
-    # which crashes before NauLog::init(). The editor loads it as a plugin after logging is up;
-    # here it is delay-loaded so it is loaded on first use, after the test environment initialized the log.
-    target_link_options(NauEditorUsdTests PRIVATE "/DELAYLOAD:$<TARGET_FILE_NAME:NauUsdAssetEditorCommon>")
-    target_link_libraries(NauEditorUsdTests PRIVATE delayimp)
 endif()
 
 target_link_libraries(NauEditorUsdTests PRIVATE

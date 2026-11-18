@@ -120,3 +120,11 @@ private:
     static const char* const m_propertyChannelId;
     static const char* const m_propertyGroupChannelId;
 };
+
+
+namespace Nau
+{
+    // Adds the physics property widgets to NauUsdPropertyFactory.
+    // It logs, so it must run after NauLog::init(), not from a static initializer.
+    NAU_USD_ASSET_EDITOR_COMMON_API void RegisterPhysicsPropertyWidgets();
+}

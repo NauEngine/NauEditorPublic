@@ -8,6 +8,7 @@
 #include "nau/scene/components/component.h"
 #include "nau/scene/internal/scene_manager_internal.h"
 
+#include "nau/inspector/nau_physics_inspector_widgets.hpp"
 #include "nau/prim-factory/nau_usd_prim_creator.hpp"
 #include "nau/selection/nau_object_selection.hpp"
 
@@ -106,6 +107,7 @@ void NauUsdSceneEditor::initialize(NauEditorInterface* mainEditor)
 
     // Init editor systems
     initPrimFactory();
+    Nau::RegisterPhysicsPropertyWidgets();
     initSceneManager();
     initSelectionContainer();
     initSceneUndoRedo();
