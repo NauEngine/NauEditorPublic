@@ -8,6 +8,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QDir>
+#include <QUuid>
 #include "nau_build_progress_parser.hpp"
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
@@ -15,6 +16,43 @@
 
 namespace {
 #ifdef Q_OS_WIN
+    class BuildProgressPipe
+    {
+    public:
+        explicit BuildProgressPipe(bool enabled)
+        {
+            if (!enabled) return;
+            m_name = QStringLiteral("\\\\.\\pipe\\NauBuildProgress-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+            m_handle = CreateNamedPipeW(reinterpret_cast<LPCWSTR>(m_name.utf16()),
+                PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT | PIPE_REJECT_REMOTE_CLIENTS,
+                1, 0, 65536, 0, nullptr);
+        }
+        ~BuildProgressPipe()
+        {
+            if (m_handle != INVALID_HANDLE_VALUE) CloseHandle(m_handle);
+        }
+        BuildProgressPipe(const BuildProgressPipe&) = delete;
+        BuildProgressPipe& operator=(const BuildProgressPipe&) = delete;
+        QString name() const { return m_handle == INVALID_HANDLE_VALUE ? QString() : m_name; }
+        void drain(NauBuildProgressParser& parser)
+        {
+            if (m_handle == INVALID_HANDLE_VALUE) return;
+            ConnectNamedPipe(m_handle, nullptr);
+            char buffer[8192];
+            DWORD available = 0;
+            while (PeekNamedPipe(m_handle, nullptr, 0, nullptr, &available, nullptr) && available)
+            {
+                DWORD read = 0;
+                if (!ReadFile(m_handle, buffer, sizeof(buffer), &read, nullptr) || !read) break;
+                parser.feed(QByteArray(buffer, static_cast<int>(read)));
+            }
+        }
+    private:
+        HANDLE m_handle = INVALID_HANDLE_VALUE;
+        QString m_name;
+    };
+
     // Assign the job during CreateProcess, before the child can spawn descendants.
     class BuildProcessJob
     {
@@ -117,7 +155,12 @@ namespace {
         if (isCancelled) job.configure(configureProcess);
 #endif
         auto environment = config.env;
-        if (progressSink) environment.insert("NAU_BUILD_EVENTS", "1");
+        environment.remove("NAU_BUILD_EVENTS");
+        environment.remove("NAU_BUILD_EVENTS_PIPE");
+#ifdef Q_OS_WIN
+        BuildProgressPipe progressPipe(static_cast<bool>(progressSink));
+        if (!progressPipe.name().isEmpty()) environment.insert("NAU_BUILD_EVENTS_PIPE", progressPipe.name());
+#endif
         configureProcess.setWorkingDirectory(config.projectRootDir);
         configureProcess.setProcessEnvironment(environment);
 
@@ -139,13 +182,15 @@ namespace {
         }
 
         QByteArray out, errors;
-        NauBuildProgressParser stdoutParser(progressSink), stderrParser(progressSink);
+        NauBuildProgressParser pipeParser(progressSink);
         const auto drain = [&] {
             auto chunk = configureProcess.readAllStandardOutput();
-            stdoutParser.feed(chunk);
+#ifdef Q_OS_WIN
+            progressPipe.drain(pipeParser);
+#endif
             out += chunk;
             chunk = configureProcess.readAllStandardError();
-            stderrParser.feed(chunk);
+
             errors += chunk;
         };
         while (configureProcess.state() == QProcess::Running) {
@@ -167,8 +212,7 @@ namespace {
         }
 
         drain();
-        stdoutParser.finish();
-        stderrParser.finish();
+        pipeParser.finish();
         config.logFile.write(out);
         config.logFile.write(errors);
 
