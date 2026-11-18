@@ -1,4 +1,4 @@
-﻿// Copyright 2024 N-GINN LLC. All rights reserved.
+// Copyright 2024 N-GINN LLC. All rights reserved.
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 //
 // Asset manager implementation
@@ -55,8 +55,6 @@ private:
 
     void sourceAdded(const std::string& sourcePath);
     void sourceRemoved(const std::string& sourcePath);
-
-    bool ensureUniqueUid(const std::string& assetPath);
 
 private:
     nau::IAssetDB& m_assetDb;
