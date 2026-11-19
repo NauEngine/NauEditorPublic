@@ -14,6 +14,7 @@
 #include "pxr/base/vt/value.h"
 #include "pxr/usd/sdf/path.h"
 #include "pxr/usd/sdf/reference.h"
+#include "pxr/usd/usd/notice.h"
 #include "pxr/usd/usd/prim.h"
 #include "pxr/usd/usd/stage.h"
 
@@ -25,6 +26,8 @@ namespace UsdProxy
 {
     class StageObjectChangedWatcher;
 }
+
+class NauDocumentChangeAccumulator;
 
 
 // ** NauUsdDocument
@@ -115,7 +118,22 @@ private:
     void unbindSubtree(const PXR_NS::SdfPath& path);
     void moveSubtree(const PXR_NS::SdfPath& oldPath, const PXR_NS::SdfPath& newPath);
 
-    void onObjectsChanged(const std::vector<PXR_NS::SdfPath>& resyncedPaths);
+    // The id bound to the path, without binding one. The root node for the absolute root.
+    NauDocumentNodeId boundNode(const PXR_NS::SdfPath& path) const;
+
+    // The id of the parent of the prim at the path; binds one if the parent still exists and has none
+    NauDocumentNodeId parentNode(const PXR_NS::SdfPath& path) const;
+
+    // Change events are collected only while someone is subscribed and no change block is open. Bindings are updated
+    // either way.
+    bool reporting() const;
+    void reportAddedSubtree(const PXR_NS::SdfPath& path);
+    void reportRemovedSubtree(const PXR_NS::SdfPath& path);
+    void reportPropertyChange(const PXR_NS::SdfPath& propertyPath);
+    void resyncSubtree(const PXR_NS::SdfPath& path);
+    void flushChanges();
+
+    void onObjectsChanged(const PXR_NS::UsdNotice::ObjectsChanged& notice);
 
 private:
     PXR_NS::UsdStageRefPtr m_stage;
@@ -132,6 +150,7 @@ private:
     bool m_modified = false;
 
     std::vector<std::pair<NauCallbackId, std::function<void(const NauDocumentChanges&)>>> m_subscribers;
+    std::unique_ptr<NauDocumentChangeAccumulator> m_changes;
     int m_batchDepth = 0;
     int m_blockDepth = 0;
 };

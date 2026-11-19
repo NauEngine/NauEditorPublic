@@ -11,6 +11,7 @@
 #include "nau/document-usd/nau_usd_document_factory.hpp"
 #include "nau/prim-factory/nau_usd_prim_creator.hpp"
 #include "nau/prim-factory/nau_usd_prim_factory.hpp"
+#include "nau/utils/nau_usd_editor_utils.hpp"
 
 #include "pxr/usd/sdf/assetPath.h"
 #include "pxr/usd/sdf/primSpec.h"
@@ -101,6 +102,28 @@ namespace
         return it != properties.end() ? &*it : nullptr;
     }
 
+    using NodeEvents = std::vector<std::pair<NauDocumentNodeId, NauDocumentNodeId>>;
+    using PropertyEvents = std::vector<std::pair<NauDocumentNodeId, std::string>>;
+
+    // (node, parent) pairs
+    NodeEvents nodeEvents(const std::vector<NauDocumentNodeEvent>& events)
+    {
+        NodeEvents result;
+        for (const NauDocumentNodeEvent& event : events) {
+            result.emplace_back(event.node, event.parent);
+        }
+        return result;
+    }
+
+    PropertyEvents propertyEvents(const NauDocumentChanges& changes)
+    {
+        PropertyEvents result;
+        for (const NauDocumentPropertyEvent& event : changes.changedProperties) {
+            result.emplace_back(event.node, event.key);
+        }
+        return result;
+    }
+
     // A file in the temp folder, removed before and after the test
     class TempFile
     {
@@ -180,6 +203,17 @@ NauDocumentNodeId NauUsdDocumentTests::createComponent(NauDocumentNodeId owner, 
         .kind = NauDocumentNodeKind::Component,
         .nameHint = name,
         .displayName = TestComponentType,
+    });
+}
+
+
+// ** NauUsdDocumentEventsTests
+
+void NauUsdDocumentEventsTests::SetUp()
+{
+    NauUsdDocumentTests::SetUp();
+    m_document->subscribe([this](const NauDocumentChanges& changes) {
+        m_delivered.push_back(changes);
     });
 }
 
@@ -1099,4 +1133,304 @@ TEST_F(NauDocumentCommandsTests, assetReferenceUndoPutsBackPreviousReferences)
     EXPECT_EQ(afterExecute, expected);
     EXPECT_TRUE(undone);
     EXPECT_EQ(afterUndo, before);
+}
+
+
+// ** Change events
+
+TEST_F(NauUsdDocumentEventsTests, createNodeReportsNodeWithItsSubtree)
+{
+    // Arrange
+    Nau::DocumentTypeRegistry().registerType({
+        .typeName = "TestEventsMesh",
+        .displayName = "Test Events Mesh",
+        .defaultAssetReference = NauDocumentAssetRef{ "", "/Library/MeshA" },
+    });
+    m_stage->DefinePrim(PXR_NS::SdfPath("/Library/MeshA/Part"));
+    m_delivered.clear();
+
+    // Act
+    const NauDocumentNodeId mesh = m_document->createNode({
+        .parent = m_document->rootNode(),
+        .typeName = "TestEventsMesh",
+        .nameHint = "Mesh",
+    });
+
+    // Assert
+    ASSERT_EQ(m_delivered.size(), 1u);
+    EXPECT_EQ(nodeEvents(m_delivered[0].addedNodes), (NodeEvents{ { mesh, m_document->rootNode() }, { node("/Mesh/Part"), mesh } }));
+    EXPECT_TRUE(m_delivered[0].changedNodes.empty());
+    EXPECT_TRUE(m_delivered[0].changedProperties.empty());
+}
+
+TEST_F(NauUsdDocumentEventsTests, removeNodeReportsKnownNodesChildrenFirst)
+{
+    // Arrange
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    defineXform("/Obj/Child", "Child", translation(0, 0, 0));
+    {
+        // Never reported, so no client knows it
+        NauDocumentChangeBlock block(*m_document);
+        defineXform("/Obj/Unknown", "Unknown", translation(0, 0, 0));
+    }
+    const NauDocumentNodeId obj = node("/Obj");
+    const NauDocumentNodeId child = node("/Obj/Child");
+    m_delivered.clear();
+
+    // Act
+    m_document->removeNode(obj);
+
+    // Assert
+    ASSERT_EQ(m_delivered.size(), 1u);
+    EXPECT_EQ(nodeEvents(m_delivered[0].removedNodes), (NodeEvents{ { child, obj }, { obj, m_document->rootNode() } }));
+    EXPECT_TRUE(m_delivered[0].addedNodes.empty());
+}
+
+TEST_F(NauUsdDocumentEventsTests, removeNodeReportsParentThatHadNoId)
+{
+    // Arrange
+    {
+        NauDocumentChangeBlock block(*m_document);
+        defineXform("/Parent", "Parent", translation(0, 0, 0));
+        defineXform("/Parent/Obj", "Obj", translation(0, 0, 0));
+    }
+    const NauDocumentNodeId obj = node("/Parent/Obj");
+    m_delivered.clear();
+
+    // Act
+    m_document->removeNode(obj);
+
+    // Assert
+    ASSERT_EQ(m_delivered.size(), 1u);
+    EXPECT_EQ(nodeEvents(m_delivered[0].removedNodes), (NodeEvents{ { obj, node("/Parent") } }));
+}
+
+TEST_F(NauUsdDocumentEventsTests, restoreNodeReportsSubtreeParentsFirst)
+{
+    // Arrange
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    defineXform("/Obj/Child", "Child", translation(0, 0, 0));
+    const NauDocumentNodeId obj = node("/Obj");
+    const NauDocumentNodeId child = node("/Obj/Child");
+    const NauDocumentNodeSnapshot nodeSnapshot = m_document->snapshotNode(obj);
+    m_document->removeNode(obj);
+    m_delivered.clear();
+
+    // Act
+    m_document->restoreNode(nodeSnapshot);
+
+    // Assert
+    ASSERT_EQ(m_delivered.size(), 1u);
+    EXPECT_EQ(nodeEvents(m_delivered[0].addedNodes), (NodeEvents{ { obj, m_document->rootNode() }, { child, obj } }));
+}
+
+TEST_F(NauUsdDocumentEventsTests, editsReportWhatChanged)
+{
+    // Arrange
+    defineXform("/A", "A", translation(0, 0, 0));
+    defineXform("/B", "B", translation(0, 0, 0));
+    defineXform("/A/Child", "Child", translation(0, 0, 0));
+    m_stage->GetPrimAtPath(PXR_NS::SdfPath("/A")).CreateAttribute(PXR_NS::TfToken("intensity"), PXR_NS::SdfValueTypeNames->Float).Set(1.0f);
+    const NauDocumentNodeId a = node("/A");
+    const NauDocumentNodeId b = node("/B");
+    const NauDocumentNodeId child = node("/A/Child");
+    const std::string transform(NauDocumentPropertyKeys::transform);
+    m_delivered.clear();
+
+    // Act
+    m_document->setDisplayName(a, "Renamed");
+    m_document->setProperty(a, "intensity", 2.0);
+    m_document->setWorldTransform(b, documentTranslation(1, 0, 0));
+    m_document->reparentNode(child, b);
+
+    // Assert
+    ASSERT_EQ(m_delivered.size(), 4u);
+    EXPECT_EQ(m_delivered[0].changedNodes, std::vector<NauDocumentNodeId>{ a });
+    EXPECT_EQ(propertyEvents(m_delivered[1]), (PropertyEvents{ { a, "intensity" } }));
+    EXPECT_EQ(propertyEvents(m_delivered[2]), (PropertyEvents{ { b, transform } }));
+    ASSERT_EQ(m_delivered[3].movedNodes.size(), 1u);
+    EXPECT_EQ(m_delivered[3].movedNodes[0].node, child);
+    EXPECT_EQ(m_delivered[3].movedNodes[0].oldParent, a);
+    EXPECT_EQ(m_delivered[3].movedNodes[0].newParent, b);
+    EXPECT_EQ(propertyEvents(m_delivered[3]), (PropertyEvents{ { child, transform } }));
+}
+
+TEST_F(NauUsdDocumentEventsTests, setAssetReferencesReportsRecomposition)
+{
+    // Arrange
+    m_stage->DefinePrim(PXR_NS::SdfPath("/Library/MeshA/PartA"));
+    m_stage->DefinePrim(PXR_NS::SdfPath("/Library/MeshB/PartB"));
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    m_stage->GetPrimAtPath(PXR_NS::SdfPath("/Obj")).GetReferences().AddReference(internalReference("/Library/MeshA"));
+    const NauDocumentNodeId obj = node("/Obj");
+    const NauDocumentNodeId partA = node("/Obj/PartA");
+    m_delivered.clear();
+
+    // Act
+    m_document->setAssetReferences(obj, { { "", "/Library/MeshB" } });
+
+    // Assert
+    ASSERT_EQ(m_delivered.size(), 1u);
+    EXPECT_EQ(nodeEvents(m_delivered[0].removedNodes), (NodeEvents{ { partA, obj } }));
+    EXPECT_EQ(nodeEvents(m_delivered[0].addedNodes), (NodeEvents{ { node("/Obj/PartB"), obj } }));
+    EXPECT_EQ(m_delivered[0].changedNodes, std::vector<NauDocumentNodeId>{ obj });
+}
+
+TEST_F(NauUsdDocumentEventsTests, batchMergesChangesOfNewNode)
+{
+    // Act
+    NauDocumentNodeId obj;
+    {
+        NauDocumentChangeBatch batch(*m_document);
+        obj = createObject(m_document->rootNode(), "Obj", translation(0, 0, 0));
+        m_document->setDisplayName(obj, "Renamed");
+        m_document->setProperty(obj, std::string(NauDocumentPropertyKeys::transform), documentTranslation(1, 2, 3));
+    }
+
+    // Assert
+    ASSERT_EQ(m_delivered.size(), 1u);
+    EXPECT_EQ(nodeEvents(m_delivered[0].addedNodes), (NodeEvents{ { obj, m_document->rootNode() } }));
+    EXPECT_TRUE(m_delivered[0].changedNodes.empty());
+    EXPECT_TRUE(m_delivered[0].changedProperties.empty());
+}
+
+TEST_F(NauUsdDocumentEventsTests, batchDropsNodeAddedAndRemoved)
+{
+    // Act
+    {
+        NauDocumentChangeBatch batch(*m_document);
+        const NauDocumentNodeId obj = createObject(m_document->rootNode(), "Obj", translation(0, 0, 0));
+        m_document->setDisplayName(obj, "Renamed");
+        m_document->removeNode(obj);
+    }
+
+    // Assert
+    EXPECT_TRUE(m_delivered.empty());
+}
+
+TEST_F(NauUsdDocumentEventsTests, batchReportsRemovedAndRestoredNodeAsChanged)
+{
+    // Arrange
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    const NauDocumentNodeId obj = node("/Obj");
+    m_delivered.clear();
+
+    // Act
+    {
+        NauDocumentChangeBatch batch(*m_document);
+        const NauDocumentNodeSnapshot nodeSnapshot = m_document->snapshotNode(obj);
+        m_document->removeNode(obj);
+        m_document->restoreNode(nodeSnapshot);
+    }
+
+    // Assert
+    ASSERT_EQ(m_delivered.size(), 1u);
+    EXPECT_TRUE(m_delivered[0].addedNodes.empty());
+    EXPECT_TRUE(m_delivered[0].removedNodes.empty());
+    EXPECT_TRUE(m_delivered[0].movedNodes.empty());
+    EXPECT_EQ(m_delivered[0].changedNodes, std::vector<NauDocumentNodeId>{ obj });
+}
+
+TEST_F(NauUsdDocumentEventsTests, nestedBatchesDeliverOnceAtTheOutermostEnd)
+{
+    // Arrange
+    defineXform("/A", "A", translation(0, 0, 0));
+    defineXform("/B", "B", translation(0, 0, 0));
+    const NauDocumentNodeId a = node("/A");
+    const NauDocumentNodeId b = node("/B");
+    m_delivered.clear();
+
+    // Act
+    size_t deliveredAfterInnerBatch = 0;
+    {
+        NauDocumentChangeBatch outer(*m_document);
+        {
+            NauDocumentChangeBatch inner(*m_document);
+            m_document->setDisplayName(a, "RenamedA");
+        }
+        deliveredAfterInnerBatch = m_delivered.size();
+        m_document->setDisplayName(b, "RenamedB");
+    }
+
+    // Assert
+    EXPECT_EQ(deliveredAfterInnerBatch, 0u);
+    ASSERT_EQ(m_delivered.size(), 1u);
+    EXPECT_EQ(m_delivered[0].changedNodes, (std::vector<NauDocumentNodeId>{ a, b }));
+}
+
+TEST_F(NauUsdDocumentEventsTests, blockDropsChangesButKeepsIdsCurrent)
+{
+    // Arrange
+    defineXform("/A", "A", translation(0, 0, 0));
+    defineXform("/B", "B", translation(0, 0, 0));
+    const NauDocumentNodeId a = node("/A");
+    const NauDocumentNodeId b = node("/B");
+    m_delivered.clear();
+
+    // Act
+    {
+        NauDocumentChangeBlock block(*m_document);
+        m_document->setDisplayName(b, "Renamed");
+        m_document->removeNode(a);
+    }
+    const size_t deliveredAfterBlock = m_delivered.size();
+    m_document->setDisplayName(b, "RenamedAgain");
+
+    // Assert
+    EXPECT_EQ(deliveredAfterBlock, 0u);
+    EXPECT_FALSE(m_document->contains(a));
+    ASSERT_EQ(m_delivered.size(), 1u);
+    EXPECT_EQ(m_delivered[0].changedNodes, std::vector<NauDocumentNodeId>{ b });
+}
+
+TEST_F(NauUsdDocumentEventsTests, outsideEditsAreReported)
+{
+    // Arrange
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    const NauDocumentNodeId obj = node("/Obj");
+    PXR_NS::UsdPrim prim = m_stage->GetPrimAtPath(PXR_NS::SdfPath("/Obj"));
+    const std::string transform(NauDocumentPropertyKeys::transform);
+    m_delivered.clear();
+
+    // Act
+    defineXform("/New", "New", translation(0, 0, 0));
+    const NauDocumentChanges afterDefine = m_delivered.front();
+    m_delivered.clear();
+
+    prim.SetDisplayName("Renamed");
+    const NauDocumentChanges afterRename = m_delivered.back();
+    m_delivered.clear();
+
+    prim.CreateAttribute(PXR_NS::TfToken("intensity"), PXR_NS::SdfValueTypeNames->Float).Set(2.0f);
+    const NauDocumentChanges afterAttribute = m_delivered.back();
+    m_delivered.clear();
+
+    NauUsdPrimUtils::setPrimTransform(prim, translation(1, 2, 3));
+    const NauDocumentChanges afterTransform = m_delivered.back();
+    m_delivered.clear();
+
+    m_stage->RemovePrim(PXR_NS::SdfPath("/Obj"));
+    const NauDocumentChanges afterRemove = m_delivered.back();
+
+    // Assert
+    EXPECT_EQ(nodeEvents(afterDefine.addedNodes), (NodeEvents{ { node("/New"), m_document->rootNode() } }));
+    EXPECT_EQ(afterRename.changedNodes, std::vector<NauDocumentNodeId>{ obj });
+    EXPECT_EQ(propertyEvents(afterAttribute), (PropertyEvents{ { obj, "intensity" } }));
+    EXPECT_EQ(propertyEvents(afterTransform), (PropertyEvents{ { obj, transform } }));
+    EXPECT_EQ(nodeEvents(afterRemove.removedNodes), (NodeEvents{ { obj, m_document->rootNode() } }));
+}
+
+TEST_F(NauUsdDocumentEventsTests, unsubscribedCallbackGetsNothing)
+{
+    // Arrange
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    int calls = 0;
+    const NauCallbackId id = m_document->subscribe([&calls](const NauDocumentChanges&) { ++calls; });
+    m_document->unsubscribe(id);
+
+    // Act
+    m_document->setDisplayName(node("/Obj"), "Renamed");
+
+    // Assert
+    EXPECT_EQ(calls, 0);
 }

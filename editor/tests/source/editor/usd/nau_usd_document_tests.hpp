@@ -36,6 +36,20 @@ protected:
 };
 
 
+// ** NauUsdDocumentEventsTests
+//
+// Records every change set the document delivers
+
+class NauUsdDocumentEventsTests : public NauUsdDocumentTests
+{
+protected:
+    virtual void SetUp() override;
+
+protected:
+    std::vector<NauDocumentChanges> m_delivered;
+};
+
+
 // ** NauDocumentCommandsTests
 //
 // The undo commands through node ids, as editors will call them once they use the document

@@ -240,16 +240,19 @@ struct NauDocumentPropertyEvent
 
 struct NauDocumentChanges
 {
-    // Every new node, parents before children
+    // Every new node with its whole subtree, parents before children
     std::vector<NauDocumentNodeEvent> addedNodes;
 
-    // Every node that's gone, children before parents
+    // Every node that's gone, children before parents. The USD backend leaves out nodes it never gave out an id for,
+    // since no client can know them.
     std::vector<NauDocumentNodeEvent> removedNodes;
 
-    // Reparented through the document. Ids don't change; descendants move along and aren't listed.
+    // Reparented through the document. Ids don't change; descendants move along and aren't listed. The local transform
+    // changes with the move and is listed in changedProperties.
     std::vector<NauDocumentNodeMoveEvent> movedNodes;
 
-    // Node-level data changed: display name, type, kind, asset references, order of children
+    // Node-level data changed: display name, type, kind, asset references, order of children. Also listed when the node
+    // was recomposed or changed by another writer: re-read its properties too.
     std::vector<NauDocumentNodeId> changedNodes;
 
     // A property was set, added or removed

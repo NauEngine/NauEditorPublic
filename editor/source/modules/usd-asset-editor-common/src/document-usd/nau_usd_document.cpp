@@ -5,6 +5,7 @@
 #include "nau/document-usd/nau_usd_document_factory.hpp"
 #include "nau/prim-factory/nau_usd_prim_factory.hpp"
 #include "nau/utils/nau_usd_editor_utils.hpp"
+#include "nau_document_change_accumulator.hpp"
 #include "nau_usd_document_values.hpp"
 #include "nau_log.hpp"
 
@@ -127,10 +128,10 @@ std::shared_ptr<NauUsdDocument> NauUsdDocument::fromStage(PXR_NS::UsdStageRefPtr
 NauUsdDocument::NauUsdDocument(PXR_NS::UsdStageRefPtr stage)
     : m_stage(stage)
     , m_rootId(nau::Uid::generate())
+    , m_changes(std::make_unique<NauDocumentChangeAccumulator>())
 {
     m_stageWatcher = std::make_unique<UsdProxy::StageObjectChangedWatcher>(m_stage, [this](const PXR_NS::UsdNotice::ObjectsChanged& notice) {
-        const auto resynced = notice.GetResyncedPaths();
-        onObjectsChanged(std::vector<PXR_NS::SdfPath>(resynced.begin(), resynced.end()));
+        onObjectsChanged(notice);
     });
 }
 
@@ -288,6 +289,8 @@ NauDocumentNodeId NauUsdDocument::createNode(const NauDocumentNodeCreateInfo& in
         return {};
     }
 
+    NauDocumentChangeBatch batch(*this);
+
     const std::string parentPath = parent.IsPseudoRoot() ? std::string() : parent.GetPath().GetString();
     const PXR_NS::SdfPath path(NauUsdSceneUtils::generateUniquePrimPath(m_stage, parentPath, info.nameHint));
 
@@ -305,6 +308,9 @@ NauDocumentNodeId NauUsdDocument::createNode(const NauDocumentNodeCreateInfo& in
     const NauDocumentNodeId id = info.id ? info.id : nau::Uid::generate();
     bind(path, id);
 
+    // With its descendants, e.g. the prims a default asset reference brings in
+    reportAddedSubtree(path);
+
     return id;
 }
 
@@ -316,6 +322,7 @@ bool NauUsdDocument::removeNode(NauDocumentNodeId id)
     }
 
     const PXR_NS::SdfPath path = found.GetPath();
+    NauDocumentChangeBatch batch(*this);
 
     bool removed = false;
     {
@@ -323,7 +330,11 @@ bool NauUsdDocument::removeNode(NauDocumentNodeId id)
         removed = m_stage->RemovePrim(path);
     }
 
-    unbindSubtree(path);
+    if (removed) {
+        reportRemovedSubtree(path);
+        unbindSubtree(path);
+    }
+
     return removed;
 }
 
@@ -392,6 +403,8 @@ bool NauUsdDocument::restoreNode(const NauDocumentNodeSnapshot& snapshot)
         }
     }
 
+    NauDocumentChangeBatch batch(*this);
+
     const PXR_NS::SdfLayerHandle layer = m_stage->GetRootLayer();
     {
         OwnEdit ownEdit(*this);
@@ -430,6 +443,8 @@ bool NauUsdDocument::restoreNode(const NauDocumentNodeSnapshot& snapshot)
         bind(relativePath.MakeAbsolutePath(path), id);
     }
 
+    reportAddedSubtree(path);
+
     return true;
 }
 
@@ -440,8 +455,18 @@ bool NauUsdDocument::setDisplayName(NauDocumentNodeId id, const std::string& dis
         return false;
     }
 
-    OwnEdit ownEdit(*this);
-    return found.SetDisplayName(displayName);
+    NauDocumentChangeBatch batch(*this);
+    bool renamed = false;
+    {
+        OwnEdit ownEdit(*this);
+        renamed = found.SetDisplayName(displayName);
+    }
+
+    if (renamed && reporting()) {
+        m_changes->nodeChanged(id);
+    }
+
+    return renamed;
 }
 
 bool NauUsdDocument::reparentNode(NauDocumentNodeId id, NauDocumentNodeId newParent)
@@ -462,7 +487,9 @@ bool NauUsdDocument::reparentNode(NauDocumentNodeId id, NauDocumentNodeId newPar
 
     const GfMatrix4d worldTransform = NauUsdPrimUtils::worldPrimTransform(found);
     const SdfPath newPath = parentPath.AppendChild(oldPath.GetNameToken());
+    const NauDocumentNodeId oldParent = nodeFromPath(oldPath.GetParentPath());
 
+    NauDocumentChangeBatch batch(*this);
     {
         OwnEdit ownEdit(*this);
 
@@ -479,7 +506,14 @@ bool NauUsdDocument::reparentNode(NauDocumentNodeId id, NauDocumentNodeId newPar
         if (UsdGeomXformable(moved)) {
             UsdGeomXformCache cache;
             NauUsdPrimUtils::setPrimTransform(moved, worldTransform * cache.GetParentToWorldTransform(moved).GetInverse());
+            if (reporting()) {
+                m_changes->propertyChanged(id, std::string(NauDocumentPropertyKeys::transform));
+            }
         }
+    }
+
+    if (reporting()) {
+        m_changes->nodeMoved(id, oldParent, newParent);
     }
 
     return true;
@@ -573,8 +607,14 @@ bool NauUsdDocument::setProperty(NauDocumentNodeId id, const std::string& key, c
         if (!matrix || !PXR_NS::UsdGeomXformable(found)) {
             return false;
         }
-        OwnEdit ownEdit(*this);
-        NauUsdPrimUtils::setPrimTransform(found, NauUsdDocumentValues::toUsdMatrix(*matrix));
+        NauDocumentChangeBatch batch(*this);
+        {
+            OwnEdit ownEdit(*this);
+            NauUsdPrimUtils::setPrimTransform(found, NauUsdDocumentValues::toUsdMatrix(*matrix));
+        }
+        if (reporting()) {
+            m_changes->propertyChanged(id, key);
+        }
         return true;
     }
 
@@ -595,8 +635,18 @@ bool NauUsdDocument::setProperty(NauDocumentNodeId id, const std::string& key, c
         return false;
     }
 
-    OwnEdit ownEdit(*this);
-    return property->setValue(*usdValue);
+    NauDocumentChangeBatch batch(*this);
+    bool set = false;
+    {
+        OwnEdit ownEdit(*this);
+        set = property->setValue(*usdValue);
+    }
+
+    if (set && reporting()) {
+        m_changes->propertyChanged(id, key);
+    }
+
+    return set;
 }
 
 NauDocumentMat4 NauUsdDocument::worldTransform(NauDocumentNodeId id) const
@@ -616,8 +666,16 @@ bool NauUsdDocument::setWorldTransform(NauDocumentNodeId id, const NauDocumentMa
         return false;
     }
 
-    OwnEdit ownEdit(*this);
-    NauUsdPrimUtils::setPrimWorldTransform(found, NauUsdDocumentValues::toUsdMatrix(transform));
+    NauDocumentChangeBatch batch(*this);
+    {
+        OwnEdit ownEdit(*this);
+        NauUsdPrimUtils::setPrimWorldTransform(found, NauUsdDocumentValues::toUsdMatrix(transform));
+    }
+
+    if (reporting()) {
+        m_changes->propertyChanged(id, std::string(NauDocumentPropertyKeys::transform));
+    }
+
     return true;
 }
 
@@ -664,15 +722,21 @@ bool NauUsdDocument::setAssetReferences(NauDocumentNodeId id, const std::vector<
         return false;
     }
 
-    OwnEdit ownEdit(*this);
+    NauDocumentChangeBatch batch(*this);
+    {
+        OwnEdit ownEdit(*this);
 
-    PXR_NS::UsdReferences usdReferences = found.GetReferences();
-    usdReferences.ClearReferences();
-    for (const NauDocumentAssetRef& reference : references) {
-        const PXR_NS::SdfPath primPath = reference.subAsset.empty() ? PXR_NS::SdfPath() : PXR_NS::SdfPath(reference.subAsset);
-        usdReferences.AddReference(PXR_NS::SdfReference(reference.asset, primPath));
+        PXR_NS::UsdReferences usdReferences = found.GetReferences();
+        usdReferences.ClearReferences();
+        for (const NauDocumentAssetRef& reference : references) {
+            const PXR_NS::SdfPath primPath = reference.subAsset.empty() ? PXR_NS::SdfPath() : PXR_NS::SdfPath(reference.subAsset);
+            usdReferences.AddReference(PXR_NS::SdfReference(reference.asset, primPath));
+        }
+        found.Load();
     }
-    found.Load();
+
+    // The prim is recomposed: what the old asset brought in is gone, the new one brings its own
+    resyncSubtree(found.GetPath());
 
     return true;
 }
@@ -699,6 +763,7 @@ void NauUsdDocument::beginChangeBatch()
 void NauUsdDocument::endChangeBatch()
 {
     --m_batchDepth;
+    flushChanges();
 }
 
 void NauUsdDocument::beginChangeBlock()
@@ -796,30 +861,179 @@ void NauUsdDocument::moveSubtree(const PXR_NS::SdfPath& oldPath, const PXR_NS::S
     }
 }
 
-void NauUsdDocument::onObjectsChanged(const std::vector<PXR_NS::SdfPath>& resyncedPaths)
+NauDocumentNodeId NauUsdDocument::boundNode(const PXR_NS::SdfPath& path) const
+{
+    if (path == PXR_NS::SdfPath::AbsoluteRootPath()) {
+        return m_rootId;
+    }
+
+    const auto it = m_idsByPath.find(path);
+    return it != m_idsByPath.end() ? it->second : NauDocumentNodeId();
+}
+
+NauDocumentNodeId NauUsdDocument::parentNode(const PXR_NS::SdfPath& path) const
+{
+    const PXR_NS::SdfPath parentPath = path.GetParentPath();
+    const NauDocumentNodeId bound = boundNode(parentPath);
+    return bound ? bound : nodeFromPath(parentPath);
+}
+
+bool NauUsdDocument::reporting() const
+{
+    return m_blockDepth == 0 && !m_subscribers.empty();
+}
+
+void NauUsdDocument::reportAddedSubtree(const PXR_NS::SdfPath& path)
+{
+    if (!reporting()) {
+        return;
+    }
+
+    // Parents before children; nodes without an id get one
+    const std::function<void(const PXR_NS::UsdPrim&, NauDocumentNodeId)> report = [this, &report](const PXR_NS::UsdPrim& added, NauDocumentNodeId parent) {
+        const NauDocumentNodeId node = nodeFromPath(added.GetPath());
+        m_changes->nodeAdded(node, parent);
+        for (const PXR_NS::UsdPrim& child : added.GetAllChildren()) {
+            report(child, node);
+        }
+    };
+
+    if (const PXR_NS::UsdPrim added = m_stage->GetPrimAtPath(path)) {
+        report(added, nodeFromPath(path.GetParentPath()));
+    }
+}
+
+void NauUsdDocument::reportRemovedSubtree(const PXR_NS::SdfPath& path)
+{
+    if (!reporting()) {
+        return;
+    }
+
+    // Only nodes with ids: no client knows the others. Children before parents.
+    std::vector<std::pair<PXR_NS::SdfPath, NauDocumentNodeId>> removed;
+    for (const auto& [boundPath, id] : m_idsByPath) {
+        if (boundPath.HasPrefix(path)) {
+            removed.emplace_back(boundPath, id);
+        }
+    }
+    std::sort(removed.begin(), removed.end(), [](const auto& left, const auto& right) {
+        return right.first < left.first;
+    });
+
+    for (const auto& [removedPath, id] : removed) {
+        m_changes->nodeRemoved(id, parentNode(removedPath));
+    }
+}
+
+void NauUsdDocument::reportPropertyChange(const PXR_NS::SdfPath& propertyPath)
+{
+    const NauDocumentNodeId node = boundNode(propertyPath.GetPrimPath());
+    if (!node || !reporting()) {
+        return;
+    }
+
+    const std::string& name = propertyPath.GetName();
+    if (name.starts_with(TransformOpPrefix)) {
+        m_changes->propertyChanged(node, std::string(NauDocumentPropertyKeys::transform));
+    } else if (name == "componentTypeName") {
+        // The node's type
+        m_changes->nodeChanged(node);
+    } else if (!isNodeDataAttribute(name)) {
+        m_changes->propertyChanged(node, name);
+    }
+}
+
+void NauUsdDocument::resyncSubtree(const PXR_NS::SdfPath& path)
+{
+    // Prims that are gone lose their ids; prims that are still at their paths keep them, as path-based code saw them
+    // before the document (decision D6)
+    std::vector<PXR_NS::SdfPath> gone;
+    for (const auto& [boundPath, id] : m_idsByPath) {
+        if (boundPath.HasPrefix(path) && !m_stage->GetPrimAtPath(boundPath)) {
+            gone.push_back(boundPath);
+        }
+    }
+    std::sort(gone.begin(), gone.end(), [](const PXR_NS::SdfPath& left, const PXR_NS::SdfPath& right) {
+        return right < left;
+    });
+    for (const PXR_NS::SdfPath& gonePath : gone) {
+        if (reporting()) {
+            m_changes->nodeRemoved(boundNode(gonePath), parentNode(gonePath));
+        }
+        unbindSubtree(gonePath);
+    }
+
+    if (!reporting()) {
+        return;
+    }
+
+    // Prims without an id are added: no client knows them. The others are changed.
+    const std::function<void(const PXR_NS::UsdPrim&, NauDocumentNodeId)> visit = [this, &visit](const PXR_NS::UsdPrim& prim, NauDocumentNodeId parent) {
+        NauDocumentNodeId node = boundNode(prim.GetPath());
+        if (!node) {
+            node = nodeFromPath(prim.GetPath());
+            m_changes->nodeAdded(node, parent);
+        } else if (!prim.IsPseudoRoot()) {
+            m_changes->nodeChanged(node);
+        }
+
+        for (const PXR_NS::UsdPrim& child : prim.GetAllChildren()) {
+            visit(child, node);
+        }
+    };
+
+    if (const PXR_NS::UsdPrim prim = m_stage->GetPrimAtPath(path)) {
+        visit(prim, boundNode(path.GetParentPath()));
+    }
+}
+
+void NauUsdDocument::flushChanges()
+{
+    if (m_batchDepth > 0 || m_changes->empty()) {
+        return;
+    }
+
+    const NauDocumentChanges changes = m_changes->take();
+    if (changes.empty()) {
+        return;
+    }
+
+    // A subscriber may subscribe or unsubscribe while handling the changes
+    const auto subscribers = m_subscribers;
+    for (const auto& [id, callback] : subscribers) {
+        callback(changes);
+    }
+}
+
+void NauUsdDocument::onObjectsChanged(const PXR_NS::UsdNotice::ObjectsChanged& notice)
 {
     m_modified = true;
 
+    // The document reports its own edits itself, exactly
     if (m_ownEditDepth > 0) {
         return;
     }
 
-    // Another writer restructured the stage, or a referenced layer changed. Prims that are gone lose their ids; prims that
-    // are still at their paths keep them, as path-based code saw them before the document (decision D6).
-    for (const PXR_NS::SdfPath& resyncedPath : resyncedPaths) {
-        if (!resyncedPath.IsPrimPath() && !resyncedPath.IsAbsoluteRootPath()) {
-            continue;
-        }
-
-        for (auto it = m_idsByPath.begin(); it != m_idsByPath.end();) {
-            if (it->first.HasPrefix(resyncedPath) && !m_stage->GetPrimAtPath(it->first)) {
-                m_pathsById.erase(it->second);
-                it = m_idsByPath.erase(it);
-            } else {
-                ++it;
-            }
+    // Another writer changed the stage, or a referenced layer changed
+    for (const PXR_NS::SdfPath& path : notice.GetResyncedPaths()) {
+        if (path.IsAbsoluteRootOrPrimPath()) {
+            resyncSubtree(path);
+        } else if (path.IsPropertyPath()) {
+            reportPropertyChange(path);
         }
     }
+
+    for (const PXR_NS::SdfPath& path : notice.GetChangedInfoOnlyPaths()) {
+        if (path.IsPrimPath()) {
+            if (const NauDocumentNodeId node = boundNode(path); node && reporting()) {
+                m_changes->nodeChanged(node);
+            }
+        } else if (path.IsPropertyPath()) {
+            reportPropertyChange(path);
+        }
+    }
+
+    flushChanges();
 }
 
 
