@@ -2,18 +2,19 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 #include "nau/undo-redo/nau_usd_selection_commands.hpp"
+#include "nau/document-usd/nau_usd_document.hpp"
 #include "nau_log.hpp"
 
 
 // ** NauCommandSelectionChanged
 
 NauCommandSelectionChanged::NauCommandSelectionChanged(
-    pxr::UsdStageRefPtr scene,
+    NauDocumentPtr document,
     const NauUsdSelectionContainerPtr selectionContainer,
     const NauUsdPrimsSelection& oldSelection,
     const NauUsdPrimsSelection& newSelection
     )
-    : NauAbstractUsdSceneCommand(scene)
+    : NauAbstractDocumentCommand(std::move(document))
     , m_selectionContainer(selectionContainer)
     , m_oldSelection(oldSelection)
     , m_newSelection(newSelection)
@@ -22,13 +23,13 @@ NauCommandSelectionChanged::NauCommandSelectionChanged(
 
 void NauCommandSelectionChanged::execute()
 {
-    m_selectionContainer->updateFromPaths(m_currentScene, collectPaths(m_newSelection));
+    m_selectionContainer->updateFromPaths(stage(), collectPaths(m_newSelection));
     NED_DEBUG("Execute prim selection command");
 }
 
 void NauCommandSelectionChanged::undo()
 {
-    m_selectionContainer->updateFromPaths(m_currentScene, collectPaths(m_oldSelection));
+    m_selectionContainer->updateFromPaths(stage(), collectPaths(m_oldSelection));
     NED_DEBUG("Undo prim selection command");
 }
 
@@ -49,4 +50,10 @@ std::vector<std::string> NauCommandSelectionChanged::collectPaths(const NauUsdPr
     }
 
     return selectedPaths;
+}
+
+pxr::UsdStageRefPtr NauCommandSelectionChanged::stage() const
+{
+    const auto* usdDocument = dynamic_cast<const NauUsdDocument*>(m_document.get());
+    return usdDocument ? usdDocument->stage() : pxr::UsdStageRefPtr();
 }

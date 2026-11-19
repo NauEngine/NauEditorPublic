@@ -166,6 +166,37 @@ PXR_NS::SdfPath NauUsdDocument::pathFromNode(NauDocumentNodeId id) const
     return found ? found.GetPath() : PXR_NS::SdfPath();
 }
 
+std::optional<NauDocumentValue> NauUsdDocument::documentValue(NauDocumentNodeId id, const std::string& key, const PXR_NS::VtValue& value) const
+{
+    if (key == NauDocumentPropertyKeys::transform) {
+        return NauUsdDocumentValues::toDocumentValue(value, NauDocumentValueType::Matrix4);
+    }
+
+    const PXR_NS::UsdPrim found = prim(id);
+    if (!found || found.IsPseudoRoot() || isNodeDataAttribute(key)) {
+        return std::nullopt;
+    }
+
+    const auto property = UsdProxy::UsdProxyPrim(found).getProperty(PXR_NS::TfToken(key));
+    if (!property || !property->isValid()) {
+        return std::nullopt;
+    }
+
+    const PXR_NS::SdfValueTypeName typeName = property->getTypeName();
+    const PXR_NS::VtValue stored = PXR_NS::VtValue::CastToTypeid(value, typeName.GetType().GetTypeid());
+    return NauUsdDocumentValues::toDocumentValue(stored.IsEmpty() ? value : stored, NauUsdDocumentValues::valueType(typeName));
+}
+
+NauDocumentMat4 NauUsdDocument::documentMatrix(const PXR_NS::GfMatrix4d& matrix)
+{
+    return NauUsdDocumentValues::toDocumentMatrix(matrix);
+}
+
+NauDocumentAssetRef NauUsdDocument::documentAssetReference(const PXR_NS::SdfReference& reference)
+{
+    return { reference.GetAssetPath(), reference.GetPrimPath().GetString() };
+}
+
 NauDocumentNodeId NauUsdDocument::rootNode() const
 {
     return m_rootId;
@@ -612,7 +643,7 @@ std::vector<NauDocumentAssetRef> NauUsdDocument::assetReferences(NauDocumentNode
     const auto& references = field.UncheckedGet<PXR_NS::SdfReferenceListOp>();
     const auto append = [&result](const std::vector<PXR_NS::SdfReference>& items) {
         for (const PXR_NS::SdfReference& reference : items) {
-            result.push_back({ reference.GetAssetPath(), reference.GetPrimPath().GetString() });
+            result.push_back(documentAssetReference(reference));
         }
     };
 

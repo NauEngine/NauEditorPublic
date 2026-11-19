@@ -10,11 +10,15 @@
 #include "nau/nau_usd_asset_editor_common_config.hpp"
 #include "nau/document/nau_document_interface.hpp"
 
+#include "pxr/base/gf/matrix4d.h"
+#include "pxr/base/vt/value.h"
 #include "pxr/usd/sdf/path.h"
+#include "pxr/usd/sdf/reference.h"
 #include "pxr/usd/usd/prim.h"
 #include "pxr/usd/usd/stage.h"
 
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 namespace UsdProxy
@@ -55,6 +59,13 @@ public:
 
     // Empty if the id is unknown or its prim is gone
     PXR_NS::SdfPath pathFromNode(NauDocumentNodeId id) const;
+
+    // A USD value for property key of the node, cast to the stored type first, as UsdAttribute::Set does.
+    // nullopt if the node has no such property, or the value can't be stored in it.
+    std::optional<NauDocumentValue> documentValue(NauDocumentNodeId id, const std::string& key, const PXR_NS::VtValue& value) const;
+
+    static NauDocumentMat4 documentMatrix(const PXR_NS::GfMatrix4d& matrix);
+    static NauDocumentAssetRef documentAssetReference(const PXR_NS::SdfReference& reference);
 
     // NauDocumentInterface
 

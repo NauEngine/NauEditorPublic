@@ -7,6 +7,7 @@
 
 #include "nau_usd_scene_snapshot.hpp"
 #include "nau/document-usd/nau_usd_document.hpp"
+#include "nau/undo-redo/nau_usd_scene_undo_redo.hpp"
 
 #include "gtest/gtest.h"
 
@@ -32,4 +33,22 @@ protected:
 protected:
     PXR_NS::UsdStageRefPtr m_stage;
     std::shared_ptr<NauUsdDocument> m_document;
+};
+
+
+// ** NauDocumentCommandsTests
+//
+// The undo commands through node ids, as editors will call them once they use the document
+
+class NauDocumentCommandsTests : public NauUsdDocumentTests
+{
+protected:
+    virtual void SetUp() override;
+
+    bool undo();
+    bool redo();
+
+protected:
+    NauUndoable m_undoable;
+    NauUsdSceneUndoRedoSystem m_undoRedo{ &m_undoable };
 };

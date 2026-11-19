@@ -13,7 +13,9 @@
 #include "nau/prim-factory/nau_usd_prim_factory.hpp"
 
 #include "pxr/usd/sdf/assetPath.h"
+#include "pxr/usd/sdf/primSpec.h"
 #include "pxr/usd/sdf/reference.h"
+#include "pxr/usd/sdf/schema.h"
 #include "pxr/usd/usd/references.h"
 #include "pxr/usd/usdGeom/xform.h"
 
@@ -179,6 +181,25 @@ NauDocumentNodeId NauUsdDocumentTests::createComponent(NauDocumentNodeId owner, 
         .nameHint = name,
         .displayName = TestComponentType,
     });
+}
+
+
+// ** NauDocumentCommandsTests
+
+void NauDocumentCommandsTests::SetUp()
+{
+    NauUsdDocumentTests::SetUp();
+    m_undoRedo.bindCurrentDocument(m_document);
+}
+
+bool NauDocumentCommandsTests::undo()
+{
+    return m_undoable.undo();
+}
+
+bool NauDocumentCommandsTests::redo()
+{
+    return m_undoable.redo();
 }
 
 
@@ -750,6 +771,8 @@ TEST_F(NauUsdDocumentTests, setAssetReferencesReplacesReferences)
     const NauSceneSnapshot afterSet = snapshot();
     const bool cleared = m_document->setAssetReferences(obj, {});
     const NauSceneSnapshot afterClear = snapshot();
+    // Cleared like the asset reference command's undo does today, not left as an empty list
+    const bool fieldAfterClear = m_stage->GetRootLayer()->GetPrimAtPath(PXR_NS::SdfPath("/Obj"))->HasField(PXR_NS::SdfFieldKeys->References);
     m_document->setAssetReferences(obj, initial);
     const NauSceneSnapshot afterSetBack = snapshot();
 
@@ -759,6 +782,7 @@ TEST_F(NauUsdDocumentTests, setAssetReferencesReplacesReferences)
     EXPECT_EQ(afterSet, expected);
     EXPECT_TRUE(cleared);
     EXPECT_EQ(afterClear, expectedCleared);
+    EXPECT_FALSE(fieldAfterClear);
     EXPECT_EQ(afterSetBack, before);
     // A reference change recomposes the prim, the id stays
     EXPECT_EQ(node("/Obj"), obj);
@@ -947,4 +971,132 @@ TEST_F(NauUsdDocumentTests, registeredTypeWithDefaultReferenceReferencesIt)
     // Assert
     EXPECT_TRUE(static_cast<bool>(mesh));
     EXPECT_EQ(m_document->assetReferences(mesh), (std::vector<NauDocumentAssetRef>{ { "", "/Library/MeshA" } }));
+}
+
+
+// ** Commands
+
+TEST_F(NauDocumentCommandsTests, redoneCreateKeepsIdForLaterCommands)
+{
+    // A rename further up the stack must find the node that redo created again
+
+    // Arrange
+    const NauSceneSnapshot expected = { { "/Obj", xformNode("Renamed", NauUsdSnapshotUtils::translationString(1, 2, 3)) } };
+    m_undoRedo.addCommand<NauCommandCreateNode>(NauDocumentNodeCreateInfo{
+        .parent = m_document->rootNode(),
+        .typeName = "Xform",
+        .nameHint = "Obj",
+        .displayName = "Obj",
+        .transform = documentTranslation(1, 2, 3),
+    });
+    const NauDocumentNodeId obj = node("/Obj");
+    m_undoRedo.addCommand<NauCommandRenameNode>(obj, std::string("Renamed"));
+
+    // Act
+    const bool undone = undo() && undo();
+    const NauSceneSnapshot afterUndo = snapshot();
+    const bool redone = redo() && redo();
+
+    // Assert
+    EXPECT_TRUE(undone);
+    EXPECT_EQ(afterUndo, NauSceneSnapshot{});
+    EXPECT_TRUE(redone);
+    EXPECT_EQ(snapshot(), expected);
+    EXPECT_EQ(node("/Obj"), obj);
+}
+
+TEST_F(NauDocumentCommandsTests, undoneRemoveKeepsIdsForEarlierCommands)
+{
+    // Arrange
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    defineXform("/Obj/Child", "Child", translation(0, 0, 0));
+    const NauSceneSnapshot before = snapshot();
+    const NauDocumentNodeId obj = node("/Obj");
+    const NauDocumentNodeId child = node("/Obj/Child");
+    m_undoRedo.addCommand<NauCommandRenameNode>(child, std::string("Renamed"));
+    m_undoRedo.addCommand<NauCommandRemoveNode>(obj);
+
+    // Act
+    const bool undone = undo() && undo();
+
+    // Assert
+    EXPECT_TRUE(undone);
+    EXPECT_EQ(snapshot(), before);
+    EXPECT_EQ(node("/Obj/Child"), child);
+}
+
+TEST_F(NauDocumentCommandsTests, reparentUndoRedo)
+{
+    // Arrange
+    defineXform("/A", "A", translation(1, 0, 0));
+    defineXform("/B", "B", translation(0, 5, 0));
+    defineXform("/A/Child", "Child", translation(0, 0, 2));
+    const NauSceneSnapshot before = snapshot();
+    NauSceneSnapshot expected = before;
+    expected.erase("/A/Child");
+    expected["/B/Child"] = xformNode("Child", NauUsdSnapshotUtils::translationString(1, -5, 2));
+    const NauDocumentNodeId child = node("/A/Child");
+
+    // Act
+    m_undoRedo.addCommand<NauCommandReparentNode>(child, node("/B"));
+    const NauSceneSnapshot afterExecute = snapshot();
+    const bool undone = undo();
+    const NauSceneSnapshot afterUndo = snapshot();
+    const bool redone = redo();
+    const NauSceneSnapshot afterRedo = snapshot();
+
+    // Assert
+    EXPECT_EQ(afterExecute, expected);
+    EXPECT_TRUE(undone);
+    EXPECT_EQ(afterUndo, before);
+    EXPECT_TRUE(redone);
+    EXPECT_EQ(afterRedo, expected);
+}
+
+TEST_F(NauDocumentCommandsTests, transformChangeAddedAfterDragUndoRedo)
+{
+    // The gizmo moves the node itself and adds the command with execute = false
+
+    // Arrange
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    const NauDocumentNodeId obj = node("/Obj");
+    const std::string key(NauDocumentPropertyKeys::transform);
+    m_document->setProperty(obj, key, documentTranslation(4, 5, 6));
+
+    // Act
+    m_undoRedo.addCommand<NauCommandChangeNodeProperty, false>(obj, key, NauDocumentValue(documentTranslation(0, 0, 0)),
+        NauDocumentValue(documentTranslation(4, 5, 6)));
+    const bool undone = undo();
+    const NauSceneSnapshot afterUndo = snapshot();
+    const bool redone = redo();
+    const NauSceneSnapshot afterRedo = snapshot();
+
+    // Assert
+    EXPECT_TRUE(undone);
+    EXPECT_EQ(afterUndo.at("/Obj"), xformNode("Obj", IdentityTransform));
+    EXPECT_TRUE(redone);
+    EXPECT_EQ(afterRedo.at("/Obj"), xformNode("Obj", NauUsdSnapshotUtils::translationString(4, 5, 6)));
+}
+
+TEST_F(NauDocumentCommandsTests, assetReferenceUndoPutsBackPreviousReferences)
+{
+    // Arrange
+    m_stage->DefinePrim(PXR_NS::SdfPath("/Library/MeshA"));
+    m_stage->DefinePrim(PXR_NS::SdfPath("/Library/MeshB"));
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    m_stage->GetPrimAtPath(PXR_NS::SdfPath("/Obj")).GetReferences().AddReference(internalReference("/Library/MeshA"));
+    const NauSceneSnapshot before = snapshot();
+    NauSceneSnapshot expected = before;
+    expected["/Obj"].references = { "</Library/MeshB>" };
+
+    // Act
+    m_undoRedo.addCommand<NauCommandChangeNodeAssetReference>(node("/Obj"), NauDocumentAssetRef{ "", "/Library/MeshB" });
+    const NauSceneSnapshot afterExecute = snapshot();
+    const bool undone = undo();
+    const NauSceneSnapshot afterUndo = snapshot();
+
+    // Assert
+    EXPECT_EQ(afterExecute, expected);
+    EXPECT_TRUE(undone);
+    EXPECT_EQ(afterUndo, before);
 }
