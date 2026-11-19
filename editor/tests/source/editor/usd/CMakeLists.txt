@@ -27,11 +27,13 @@ set(Sources
     nau_main.cpp
 
     nau_usd_scene_snapshot.cpp
+    nau_usd_document_tests.cpp
     nau_usd_undo_commands_tests.cpp
 )
 
 set(Headers
     nau_usd_scene_snapshot.hpp
+    nau_usd_document_tests.hpp
     nau_usd_undo_commands_tests.hpp
     nau_gtest_printers.hpp
 )

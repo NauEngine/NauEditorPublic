@@ -102,3 +102,9 @@ std::map<std::string, std::string> NauUsdPrimFactory::registeredPrimCreatorsWith
 
     return types;
 }
+
+std::string NauUsdPrimFactory::displayName(const std::string& primType) const
+{
+    const auto it = m_typesDisplayNames.find(primType);
+    return it != m_typesDisplayNames.end() ? it->second : std::string();
+}
