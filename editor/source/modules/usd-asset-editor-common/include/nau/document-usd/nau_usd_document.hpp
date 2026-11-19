@@ -114,7 +114,7 @@ private:
     mutable std::unordered_map<PXR_NS::SdfPath, NauDocumentNodeId, PXR_NS::SdfPath::Hash> m_idsByPath;
     mutable std::unordered_map<NauDocumentNodeId, PXR_NS::SdfPath> m_pathsById;
 
-    // Nonzero while the document edits the stage itself; other resyncs come from other writers and drop the ids they touch
+    // Nonzero while the document edits the stage itself. Resyncs by other writers drop only the ids of prims that are gone.
     int m_ownEditDepth = 0;
 
     std::unique_ptr<UsdProxy::StageObjectChangedWatcher> m_stageWatcher;

@@ -768,6 +768,32 @@ TEST_F(NauUsdDocumentTests, setAssetReferencesReplacesReferences)
 
 // ** Ids and edits made outside the document
 
+TEST_F(NauUsdDocumentTests, outsideRecompositionKeepsIdsOfNodesStillThere)
+{
+    // E.g. a referenced asset changes, or another editor changes references on the stage
+
+    // Arrange
+    m_stage->DefinePrim(PXR_NS::SdfPath("/Library/MeshA"));
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    defineXform("/Obj/Child", "Child", translation(0, 0, 0));
+    defineXform("/Obj/Other", "Other", translation(0, 0, 0));
+    const NauDocumentNodeId obj = node("/Obj");
+    const NauDocumentNodeId child = node("/Obj/Child");
+    const NauDocumentNodeId other = node("/Obj/Other");
+
+    // Act
+    m_stage->GetPrimAtPath(PXR_NS::SdfPath("/Obj")).GetReferences().AddReference(internalReference("/Library/MeshA"));
+    const bool containsAfterRecompose = m_document->contains(obj) && m_document->contains(child) && m_document->contains(other);
+    m_stage->RemovePrim(PXR_NS::SdfPath("/Obj/Other"));
+
+    // Assert
+    EXPECT_TRUE(containsAfterRecompose);
+    EXPECT_TRUE(m_document->contains(obj));
+    EXPECT_TRUE(m_document->contains(child));
+    EXPECT_FALSE(m_document->contains(other));
+    EXPECT_EQ(node("/Obj/Child"), child);
+}
+
 TEST_F(NauUsdDocumentTests, outsideRestructureGivesNewIds)
 {
     // Arrange

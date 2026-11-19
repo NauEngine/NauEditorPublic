@@ -773,10 +773,20 @@ void NauUsdDocument::onObjectsChanged(const std::vector<PXR_NS::SdfPath>& resync
         return;
     }
 
-    // Another writer restructured the stage: what it touched gets new ids (decision D6)
-    for (const PXR_NS::SdfPath& path : resyncedPaths) {
-        if (path.IsPrimPath()) {
-            unbindSubtree(path);
+    // Another writer restructured the stage, or a referenced layer changed. Prims that are gone lose their ids; prims that
+    // are still at their paths keep them, as path-based code saw them before the document (decision D6).
+    for (const PXR_NS::SdfPath& resyncedPath : resyncedPaths) {
+        if (!resyncedPath.IsPrimPath() && !resyncedPath.IsAbsoluteRootPath()) {
+            continue;
+        }
+
+        for (auto it = m_idsByPath.begin(); it != m_idsByPath.end();) {
+            if (it->first.HasPrefix(resyncedPath) && !m_stage->GetPrimAtPath(it->first)) {
+                m_pathsById.erase(it->second);
+                it = m_idsByPath.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 }

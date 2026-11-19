@@ -234,8 +234,9 @@ struct NauDocumentPropertyEvent
 // Within a batch a node appears at most once per list, and the lists don't contradict each other: a node added and removed
 // in the same batch isn't reported, a removed node has no other entries, an added node has no moved, changed or property
 // entries. (USD backend: this is the de-duplication left as a TODO in NauUsdSceneUITranslator::recomposeEvents.)
-// Changes made outside the document, such as an asset editor writing to the same stage, show up as removed + added,
-// and the added nodes get new ids.
+// Changes made outside the document, such as an asset editor writing to the same stage or a referenced asset changing,
+// are reported per node: nodes that appear are added (with new ids), nodes that disappear are removed, and nodes that are
+// still where they were keep their ids and are reported as changed.
 
 struct NauDocumentChanges
 {
