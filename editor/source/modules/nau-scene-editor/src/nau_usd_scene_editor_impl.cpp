@@ -8,6 +8,7 @@
 #include "nau/scene/components/component.h"
 #include "nau/scene/internal/scene_manager_internal.h"
 
+#include "nau/inspector/nau_physics_inspector_widgets.hpp"
 #include "nau/prim-factory/nau_usd_prim_creator.hpp"
 #include "nau/selection/nau_object_selection.hpp"
 
@@ -106,6 +107,7 @@ void NauUsdSceneEditor::initialize(NauEditorInterface* mainEditor)
 
     // Init editor systems
     initPrimFactory();
+    Nau::RegisterPhysicsPropertyWidgets();
     initSceneManager();
     initSelectionContainer();
     initSceneUndoRedo();
@@ -636,7 +638,12 @@ void NauUsdSceneEditor::addPrimFromOther(const pxr::SdfPathSet& primsPaths, PXR_
     }
 
     std::string uniquePath = "";
-    PXR_NS::UsdPrim newPrim = createPrim(parentPath, other.GetName(), other.GetTypeName(), NauUsdPrimUtils::isPrimComponent(other), uniquePath);
+    const PXR_NS::TfToken typeName(NauUsdPrimUtils::creationTypeName(other));
+    PXR_NS::UsdPrim newPrim = createPrim(parentPath, other.GetName(), typeName, NauUsdPrimUtils::isPrimComponent(other), uniquePath);
+    if (!newPrim) {
+        NED_WARNING("Failed to copy prim {}, its children are skipped", other.GetPath().GetString());
+        return;
+    }
 
     for (auto childPrim : other.GetAllChildren()) {
         addPrimFromOther(primsPaths, childPrim, newPrim.GetPath());

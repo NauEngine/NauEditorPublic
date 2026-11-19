@@ -44,6 +44,9 @@ public:
     std::vector<std::string> registeredAllPrimCreators() const;
     std::map<std::string, std::string> registeredPrimCreatorsWithDisplayNames(primFilter filter) const;
 
+    // Empty if the type isn't registered
+    std::string displayName(const std::string& primType) const;
+
 private:
     std::map<std::string, NauUsdPrimCreatorAbstractPtr> m_creators;
     std::map<std::string, std::string> m_typesDisplayNames;

@@ -1,14 +1,16 @@
 ﻿// Copyright 2024 N-GINN LLC. All rights reserved.
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 //
-// Provides undo/redo commands for usd stage.
+// Path-based constructors of the document commands (nau_document_commands.hpp), for call sites that don't use node ids
+// yet (USD migration Stage 1). They need a USD document. Remove each one when its last call site moves to node ids.
 
 #pragma once
 
 #include "nau/nau_usd_asset_editor_common_config.hpp"
-#include "commands/nau_commands.hpp"
+#include "nau/undo-redo/nau_document_commands.hpp"
 
 #include "pxr/usd/usd/stage.h"
+#include "pxr/usd/sdf/layer.h"
 #include "pxr/base/gf/matrix4d.h"
 
 #include "usd_proxy/usd_proxy.h"
@@ -16,144 +18,66 @@
 #include <string>
 
 
-// ** NauAbstractUsdSceneCommand
-
-class NAU_USD_ASSET_EDITOR_COMMON_API NauAbstractUsdSceneCommand : public NauAbstractCommand
-{
-public:
-    NauAbstractUsdSceneCommand() = delete;
-    NauAbstractUsdSceneCommand(pxr::UsdStageRefPtr m_currentScene);
-
-protected:
-    pxr::UsdStageRefPtr m_currentScene;
-};
-
-
 // ** NauCommandCreateUsdPrim
 
-class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandCreateUsdPrim : public NauAbstractUsdSceneCommand
+class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandCreateUsdPrim : public NauCommandCreateNode
 {
 public:
+    // The prim gets exactly this path; its parent must exist
     NauCommandCreateUsdPrim(
-        pxr::UsdStageRefPtr scene,
+        NauDocumentPtr document,
         const std::string& path,
         const std::string& typeName,
         const std::string& displayName,
         const PXR_NS::GfMatrix4d& initialTransform,
         bool isComponent
     );
-
-    void execute() override;
-    void undo() override;
-    NauCommandDescriptor description() const override;
-
-private:
-    const PXR_NS::GfMatrix4d& m_initialTransform;
-    const std::string m_typeName;
-    const std::string m_displayName;
-    const std::string m_path;
-    const bool m_isComponent;
 };
 
 
 // ** NauCommandRemoveUsdPrim
 
-class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandRemoveUsdPrim : public NauAbstractUsdSceneCommand
+class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandRemoveUsdPrim : public NauCommandRemoveNode
 {
 public:
-    NauCommandRemoveUsdPrim(pxr::UsdStageRefPtr scene, const std::string& path);
-
-    void execute() override;
-    void undo() override;
-    NauCommandDescriptor description() const override;
-
-private:
-    std::string m_typeName;
-    std::string m_displayName;
-    const std::string m_path;
+    NauCommandRemoveUsdPrim(NauDocumentPtr document, const std::string& path);
 };
 
 
 // ** NauCommandRenameUsdPrim
 
-class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandRenameUsdPrim : public NauAbstractUsdSceneCommand
+class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandRenameUsdPrim : public NauCommandRenameNode
 {
 public:
-    NauCommandRenameUsdPrim(pxr::UsdStageRefPtr scene, const std::string& path, const std::string& newName);
-
-    void execute() override;
-    void undo() override;
-    NauCommandDescriptor description() const override;
-
-private:
-    std::string m_oldName;
-    std::string m_newName;
-    const std::string m_path;
+    NauCommandRenameUsdPrim(NauDocumentPtr document, const std::string& path, const std::string& newName);
 };
 
 
 // ** NauCommandReparentUsdPrim
 
-class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandReparentUsdPrim : public NauAbstractUsdSceneCommand
+class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandReparentUsdPrim : public NauCommandReparentNode
 {
 public:
-    NauCommandReparentUsdPrim(pxr::UsdStageRefPtr scene, const std::string& currentPath,
-        const std::string& newPath);
-
-    void execute() override;
-    void undo() override;
-    NauCommandDescriptor description() const override;
-
-private:
-    bool reparentPrim(PXR_NS::SdfPath& oldPath, PXR_NS::SdfPath& newPath);
-
-    PXR_NS::SdfPath m_oldPath;
-    PXR_NS::SdfPath m_newPath;
+    NauCommandReparentUsdPrim(NauDocumentPtr document, const std::string& currentPath, const std::string& newParentPath);
 };
 
 
 // ** NauCommandChangeUsdPrimProperty
 
-class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandChangeUsdPrimProperty : public NauAbstractUsdSceneCommand
+class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandChangeUsdPrimProperty : public NauCommandChangeNodeProperty
 {
 public:
-    NauCommandChangeUsdPrimProperty(pxr::UsdStageRefPtr scene, const PXR_NS::SdfPath& path, const PXR_NS::TfToken& propName, const PXR_NS::VtValue& newValue);
-    NauCommandChangeUsdPrimProperty(pxr::UsdStageRefPtr scene, const PXR_NS::SdfPath& path, const PXR_NS::TfToken& propName, const PXR_NS::VtValue& initialValue, const PXR_NS::VtValue& newValue);
-
-    void execute() override;
-    void undo() override;
-    NauCommandDescriptor description() const override;
-
-private:
-    UsdProxy::UsdProxyPropertyPtr proxyProperty(const PXR_NS::SdfPath& path, const PXR_NS::TfToken& propName);
-
-private:
-    PXR_NS::VtValue m_initialValue;
-    PXR_NS::VtValue m_value;
-
-    const PXR_NS::TfToken m_propName;
-    const PXR_NS::SdfPath m_path;
+    NauCommandChangeUsdPrimProperty(NauDocumentPtr document, const PXR_NS::SdfPath& path, const PXR_NS::TfToken& propName, const PXR_NS::VtValue& newValue);
+    NauCommandChangeUsdPrimProperty(NauDocumentPtr document, const PXR_NS::SdfPath& path, const PXR_NS::TfToken& propName, const PXR_NS::VtValue& initialValue, const PXR_NS::VtValue& newValue);
 };
 
 
-// ** NauCommandChangeUsdPrimProperty
+// ** NauCommandChangeUsdPrimAssetReference
 
-class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandChangeUsdPrimAssetReference : public NauAbstractUsdSceneCommand
+class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandChangeUsdPrimAssetReference : public NauCommandChangeNodeAssetReference
 {
 public:
-    NauCommandChangeUsdPrimAssetReference(pxr::UsdStageRefPtr scene, const PXR_NS::SdfPath& path, const PXR_NS::VtValue& newValue);
-    NauCommandChangeUsdPrimAssetReference(pxr::UsdStageRefPtr scene, const PXR_NS::SdfPath& path, const PXR_NS::VtValue& initialValue, const PXR_NS::VtValue& newValue);
-
-    void execute() override;
-    void undo() override;
-    NauCommandDescriptor description() const override;
-
-private:
-    void setPrimReference(PXR_NS::VtValue value);
-
-private:
-    PXR_NS::VtValue m_initialValue;
-    PXR_NS::VtValue m_value;
-
-    const PXR_NS::SdfPath m_path;
+    // The values hold an SdfReference
+    NauCommandChangeUsdPrimAssetReference(NauDocumentPtr document, const PXR_NS::SdfPath& path, const PXR_NS::VtValue& newValue);
+    NauCommandChangeUsdPrimAssetReference(NauDocumentPtr document, const PXR_NS::SdfPath& path, const PXR_NS::VtValue& initialValue, const PXR_NS::VtValue& newValue);
 };

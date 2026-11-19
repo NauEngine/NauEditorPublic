@@ -21,23 +21,28 @@ class NAU_USD_ASSET_EDITOR_COMMON_API NauUsdSceneUndoRedoSystem
 public:
     NauUsdSceneUndoRedoSystem(NauUndoable* undoRedoSystem);
 
-    template<std::derived_from<NauAbstractUsdSceneCommand> T, bool execute = true, typename... Args>
+    template<std::derived_from<NauAbstractDocumentCommand> T, bool execute = true, typename... Args>
     void addCommand(Args&&... args);
     void groupBegin(size_t commandsCount);
 
+    void bindCurrentDocument(NauDocumentPtr document);
+    void unbindCurrentDocument();
+    const NauDocumentPtr& currentDocument() const;
+
+    // Binds a USD document over the stage, for editors that don't have a document yet (USD migration Stage 1)
     void bindCurrentScene(pxr::UsdStageRefPtr currentScene);
     void unbindCurrentScene();
 
 private:
-    pxr::UsdStageRefPtr m_currentScene;
+    NauDocumentPtr m_currentDocument;
     NauUndoable* m_undoRedoSystem = nullptr;
 };
 
 using NauUsdSceneUndoRedoSystemPtr = std::shared_ptr<NauUsdSceneUndoRedoSystem>;
 
 
-template<std::derived_from<NauAbstractUsdSceneCommand> T, bool execute, typename... Args>
+template<std::derived_from<NauAbstractDocumentCommand> T, bool execute, typename... Args>
 void NauUsdSceneUndoRedoSystem::addCommand(Args&&... args)
 {
-    m_undoRedoSystem->addCommand<T, execute>(m_currentScene, std::forward<Args>(args)...);
+    m_undoRedoSystem->addCommand<T, execute>(m_currentDocument, std::forward<Args>(args)...);
 }

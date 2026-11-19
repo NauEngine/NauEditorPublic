@@ -13,16 +13,19 @@
 #include <QStandardItemModel>
 
 
-namespace
+namespace Nau
 {
-    bool settingsRegResult = NauUsdPropertyFactory::addPropertyWidgetCreator("physics:collisionChannelSettings",
-        NauInspectorPhysicsCollisionButton::Create);
+    void RegisterPhysicsPropertyWidgets()
+    {
+        NauUsdPropertyFactory::addPropertyWidgetCreator("physics:collisionChannelSettings",
+            NauInspectorPhysicsCollisionButton::Create);
 
-    bool channelChooseRegResult = NauUsdPropertyFactory::addPropertyWidgetCreator("physics:collisionChannel",
-        NauInspectorPhysicsCollisionSelector::Create);
+        NauUsdPropertyFactory::addPropertyWidgetCreator("physics:collisionChannel",
+            NauInspectorPhysicsCollisionSelector::Create);
 
-    bool materialRegResult = NauUsdPropertyFactory::addPropertyWidgetCreator("PhysicsMaterial:material",
-        NauInspectorPhysicsMaterialAsset::Create);
+        NauUsdPropertyFactory::addPropertyWidgetCreator("PhysicsMaterial:material",
+            NauInspectorPhysicsMaterialAsset::Create);
+    }
 }
 
 

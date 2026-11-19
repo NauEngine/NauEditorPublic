@@ -6,17 +6,19 @@
 #pragma once
 
 #include "nau/nau_usd_asset_editor_common_config.hpp"
-#include "nau_usd_scene_commands.hpp"
+#include "nau_document_commands.hpp"
 #include "nau/selection/nau_usd_selection_container.hpp"
 
 
 // ** NauCommandSelectionChanged
 
-class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandSelectionChanged : public NauAbstractUsdSceneCommand
+// Moves to node ids with the selection container (T1.5); until then it needs a USD document.
+
+class NAU_USD_ASSET_EDITOR_COMMON_API NauCommandSelectionChanged : public NauAbstractDocumentCommand
 {
 public:
     NauCommandSelectionChanged(
-        pxr::UsdStageRefPtr scene,
+        NauDocumentPtr document,
         const NauUsdSelectionContainerPtr selectionContainer,
         const NauUsdPrimsSelection& oldSelection,
         const NauUsdPrimsSelection& newSelection
@@ -28,6 +30,7 @@ public:
 
 private:
     std::vector<std::string> collectPaths(const NauUsdPrimsSelection& selection);
+    pxr::UsdStageRefPtr stage() const;
 
 private:
     // TODO: Usd weak ptr

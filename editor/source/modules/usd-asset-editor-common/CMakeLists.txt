@@ -70,6 +70,11 @@ target_link_libraries(${TargetName} PRIVATE
     NauPhysicsSchema
 )
 
+# The USD backend of the editor document interface is in src/document-usd
+target_link_libraries(${TargetName} PUBLIC
+    NauEditorDocument
+)
+
 nau_add_compile_options(${TargetName} ENABLE_RTTI)
 
 set_target_properties (${TargetName} PROPERTIES FOLDER "${NauEditorFolder}/source/modules")
