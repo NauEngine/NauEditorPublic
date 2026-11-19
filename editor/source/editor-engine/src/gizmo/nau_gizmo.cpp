@@ -11,6 +11,9 @@
 #include <QPoint>
 #include <QMouseEvent>
 
+#include <algorithm>
+#include <limits>
+
 
 static constexpr int NauAxisLenPx = 100;
 static constexpr float NauGizmoPxWidth = 8;
@@ -19,6 +22,9 @@ static constexpr float NauGizmoBoxWidth = 8;
 static constexpr unsigned NauFillMask = 0xAAAAAAAA;
 static constexpr float NauGizmoMeter = 0.01;
 static constexpr int NauGizmoCircleDensity = 40;
+static constexpr float NauGizmoPlaneMin = 0.20f;
+static constexpr float NauGizmoPlaneMax = 0.45f;
+static constexpr float NauGizmoMinPlaneRayDot = 0.05f;
 
 static const nau::math::E3DCOLOR ColorRed = {255, 0, 0};
 static const nau::math::E3DCOLOR ColorLtRed = {255, 114, 118};
@@ -40,18 +46,37 @@ static bool isPointInRect(const nau::math::vec2& point, const nau::math::vec2& s
     return Vectormath::length(point - (start + x * norm)) <= width;
 }
 
-static bool isPointInTriangle(const nau::math::vec2& point, const nau::math::vec2* triangle)
+static void planeHandleCorners(
+    const nau::math::vec3& center,
+    const nau::math::vec3& axisA,
+    const nau::math::vec3& axisB,
+    nau::math::vec3 out[4])
 {
-    const auto sign = [](const nau::math::vec2& p1, const nau::math::vec2& p2, const nau::math::vec2& p3) -> float
-    {
-        return (p1.getX() - p3.getX()) * (p2.getY() - p3.getY()) - (p2.getX() - p3.getX()) * (p1.getY() - p3.getY());
-    };
-    const float d1 = sign(point, triangle[0], triangle[1]);
-    const float d2 = sign(point, triangle[1], triangle[2]);
-    const float d3 = sign(point, triangle[2], triangle[0]);
+    out[0] = center + axisA * NauGizmoPlaneMin + axisB * NauGizmoPlaneMin;
+    out[1] = center + axisA * NauGizmoPlaneMax + axisB * NauGizmoPlaneMin;
+    out[2] = center + axisA * NauGizmoPlaneMax + axisB * NauGizmoPlaneMax;
+    out[3] = center + axisA * NauGizmoPlaneMin + axisB * NauGizmoPlaneMax;
+}
 
-    const bool has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
-    const bool has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+static bool isPointInConvexPolygon(const nau::math::vec2& point, const nau::math::vec2* poly, int count)
+{
+    bool has_neg = false;
+    bool has_pos = false;
+
+    for (int i = 0; i < count; ++i) {
+        const nau::math::vec2& a = poly[i];
+        const nau::math::vec2& b = poly[(i + 1) % count];
+
+        const float cross = (b.getX() - a.getX()) * (point.getY() - a.getY())
+            - (b.getY() - a.getY()) * (point.getX() - a.getX());
+
+        has_neg = has_neg || (cross < 0);
+        has_pos = has_pos || (cross > 0);
+    }
+
+    if (!has_neg && !has_pos) {
+        return false;
+    }
 
     return !(has_neg && has_pos);
 }
@@ -364,7 +389,7 @@ nau::math::vec3 NauTranslateGizmo::calculateDelta(const nau::math::vec2& delta, 
         }
     }
 
-    if (fabsf(Vectormath::SSE::dot(m_planeNormal, mouseDir)) > 0.05) {
+    if (fabsf(Vectormath::SSE::dot(m_planeNormal, mouseDir)) > NauGizmoMinPlaneRayDot) {
         m_movedDelta = (Vectormath::SSE::dot(m_planeNormal, pivotPosition - mouseWorld) / Vectormath::SSE::dot(m_planeNormal, mouseDir)) * mouseDir + mouseWorld;
         m_movedDelta -= pivotPosition;
     }
@@ -390,80 +415,86 @@ nau::math::vec3 NauTranslateGizmo::calculateDelta(const nau::math::vec2& delta, 
 
 NauGizmoAbstract::Axes NauTranslateGizmo::detectHoveredAxes(nau::math::vec2 screenPoint)
 {
-    const NauBasis2D& screenBasis = basis2d();
+    const nau::math::vec3 center = m_basis3d.getCol3().getXYZ();
+    const nau::math::vec3 axisX = Vectormath::SSE::normalize(m_basis3d.getCol0().getXYZ()) * m_axesLength3d;
+    const nau::math::vec3 axisY = Vectormath::SSE::normalize(m_basis3d.getCol1().getXYZ()) * m_axesLength3d;
+    const nau::math::vec3 axisZ = Vectormath::SSE::normalize(m_basis3d.getCol2().getXYZ()) * m_axesLength3d;
 
-    const float planeMin = 0.20f;
-    const float planeMax = 0.45f;
+    nau::math::vec3 rayOrigin, rayDirection;
+    Nau::Utils::screenToWorld(screenPoint, rayOrigin, rayDirection);
+    const auto camera = Nau::EditorEngine().cameraManager()->activeCamera()->getWorldTransform().getMatrix();
+    const auto cameraForward = -camera.getCol2().getXYZ();
+    const auto centerOffset = center - rayOrigin;
+    const float centerDepth = Vectormath::SSE::dot(centerOffset, cameraForward);
 
-    nau::math::vec2 triangle[3];
+    Axes hoveredAxes = Axes::None;
+    float closestDepth = std::numeric_limits<float>::infinity();
+    const auto hitPlane = [&](Axes axes, const nau::math::vec3& axisA, const nau::math::vec3& axisB) {
+        const auto normal = Vectormath::SSE::cross(axisA, axisB);
+        const float rayDot = Vectormath::SSE::dot(normal, rayDirection);
+        if (fabsf(rayDot) <= NauGizmoMinPlaneRayDot * Vectormath::SSE::length(normal)) {
+            return;
+        }
 
-    triangle[0] = screenBasis.center
-        + screenBasis.axisX * planeMin
-        + screenBasis.axisY * planeMin;
+        const float rayDistance = Vectormath::SSE::dot(normal, centerOffset) / rayDot;
+        const float depth = rayDistance * Vectormath::SSE::dot(rayDirection, cameraForward);
+        if (depth <= 0.0f || depth >= closestDepth) {
+            return;
+        }
 
-    triangle[1] = screenBasis.center
-        + screenBasis.axisX * planeMax
-        + screenBasis.axisY * planeMin;
+        nau::math::vec3 corners[4];
+        nau::math::vec2 quad[4];
+        planeHandleCorners(center, axisA, axisB, corners);
+        for (int i = 0; i < 4; ++i) {
+            Nau::Utils::worldToScreen(corners[i], quad[i]);
+        }
+        if (isPointInConvexPolygon(screenPoint, quad, 4)) {
+            hoveredAxes = axes;
+            closestDepth = depth;
+        }
+    };
 
-    triangle[2] = screenBasis.center
-        + screenBasis.axisX * planeMin
-        + screenBasis.axisY * planeMax;
+    hitPlane(Axes::AxisXY, axisX, axisY);
+    hitPlane(Axes::AxisXZ, axisX, axisZ);
+    hitPlane(Axes::AxisYZ, axisY, axisZ);
 
-    if (isPointInTriangle(screenPoint, triangle)) {
-        return Axes::AxisXY;
+    const bool hitPlaneHandle = hoveredAxes != Axes::None;
+    nau::math::vec2 screenCenter;
+    Nau::Utils::worldToScreen(center, screenCenter);
+
+    const struct {
+        Axes axes;
+        nau::math::vec3 offset;
+    } axisHandles[] = {{Axes::AxisX, axisX}, {Axes::AxisY, axisY}, {Axes::AxisZ, axisZ}};
+
+    for (const auto& axis : axisHandles) {
+        nau::math::vec2 screenEnd;
+        Nau::Utils::worldToScreen(center + axis.offset, screenEnd);
+        const auto screenAxis = screenEnd - screenCenter;
+        const float screenLengthSquared = Vectormath::dot(screenAxis, screenAxis);
+        if (screenLengthSquared <= 0.0f || !isPointInRect(screenPoint, screenCenter, screenEnd, NauGizmoPxWidth)) {
+            continue;
+        }
+
+        if (!hitPlaneHandle) {
+            return axis.axes;
+        }
+
+        const float endDepth = centerDepth + Vectormath::SSE::dot(axis.offset, cameraForward);
+        if (centerDepth <= 0.0f || endDepth <= 0.0f) {
+            continue;
+        }
+
+        // Interpolate inverse depth at the nearest point on the projected arrow shaft.
+        const float t = std::clamp(Vectormath::dot(screenPoint - screenCenter, screenAxis) / screenLengthSquared, 0.0f, 1.0f);
+        const float depth = 1.0f / ((1.0f - t) / centerDepth + t / endDepth);
+        if (depth < closestDepth) {
+            hoveredAxes = axis.axes;
+            closestDepth = depth;
+        }
     }
 
-    triangle[0] = screenBasis.center
-        + screenBasis.axisX * planeMin
-        + screenBasis.axisZ * planeMin;
-
-    triangle[1] = screenBasis.center
-        + screenBasis.axisX * planeMax
-        + screenBasis.axisZ * planeMin;
-
-    triangle[2] = screenBasis.center
-        + screenBasis.axisX * planeMin
-        + screenBasis.axisZ * planeMax;
-
-    if (isPointInTriangle(screenPoint, triangle)) {
-        return Axes::AxisXZ;
-    }
-
-    triangle[0] = screenBasis.center
-        + screenBasis.axisY * planeMin
-        + screenBasis.axisZ * planeMin;
-
-    triangle[1] = screenBasis.center
-        + screenBasis.axisY * planeMax
-        + screenBasis.axisZ * planeMin;
-
-    triangle[2] = screenBasis.center
-        + screenBasis.axisY * planeMin
-        + screenBasis.axisZ * planeMax;
-
-    if (isPointInTriangle(screenPoint, triangle)) {
-        return Axes::AxisYZ;
-    }
-
-    nau::math::vec2 p1, p2;
-    Nau::Utils::worldToScreen(m_basis3d.getCol3().getXYZ(), p1);
-
-    Nau::Utils::worldToScreen(m_basis3d.getCol3().getXYZ() + Vectormath::SSE::normalize(m_basis3d.getCol0().getXYZ()) * m_axesLength3d, p2);
-    if (isPointInRect(screenPoint, p1, p2, NauGizmoPxWidth)) {
-        return Axes::AxisX;
-    }
-
-    Nau::Utils::worldToScreen(m_basis3d.getCol3().getXYZ() + Vectormath::SSE::normalize(m_basis3d.getCol1().getXYZ()) * m_axesLength3d, p2);
-    if (isPointInRect(screenPoint, p1, p2, NauGizmoPxWidth)) {
-        return Axes::AxisY;
-    }
-
-    Nau::Utils::worldToScreen(m_basis3d.getCol3().getXYZ() + Vectormath::SSE::normalize(m_basis3d.getCol2().getXYZ()) * m_axesLength3d, p2);
-    if (isPointInRect(screenPoint, p1, p2, NauGizmoPxWidth)) {
-        return Axes::AxisZ;
-    }
-
-    return Axes::None;
+    return hoveredAxes;
 }
 
 void NauTranslateGizmo::renderInternal(const nau::math::mat4& basis, int selectedAxes)
@@ -494,52 +525,23 @@ void NauTranslateGizmo::renderInternal(const nau::math::mat4& basis, int selecte
         basis.getCol0().getXYZ(),
         1);
 
-    const float planeMin = 0.20f;
-    const float planeMax = 0.45f;
-
     const nau::math::vec3 center = basis.getCol3().getXYZ();
+    const nau::math::vec3 axisX = Vectormath::SSE::normalize(basis.getCol0().getXYZ()) * m_axesLength3d;
+    const nau::math::vec3 axisY = Vectormath::SSE::normalize(basis.getCol1().getXYZ()) * m_axesLength3d;
+    const nau::math::vec3 axisZ = Vectormath::SSE::normalize(basis.getCol2().getXYZ()) * m_axesLength3d;
 
-    const nau::math::vec3 axisX =
-        Vectormath::SSE::normalize(basis.getCol0().getXYZ()) * m_axesLength3d;
+    nau::math::vec3 corners[4];
+    const auto drawPlaneHandle = [&](const nau::math::vec3& axisA, const nau::math::vec3& axisB, const nau::math::E3DCOLOR& color)
+        {
+            planeHandleCorners(center, axisA, axisB, corners);
+            for (int i = 0; i < 4; ++i) {
+                dr.drawLine(nau::math::Point3(corners[i]), nau::math::Point3(corners[(i + 1) % 4]), color, 1);
+            }
+        };
 
-    const nau::math::vec3 axisY =
-        Vectormath::SSE::normalize(basis.getCol1().getXYZ()) * m_axesLength3d;
-
-    const nau::math::vec3 axisZ =
-        Vectormath::SSE::normalize(basis.getCol2().getXYZ()) * m_axesLength3d;
-
-    lineColor = (m_hoveredAxes == AxisXY) ? ColorYellow : ColorLtBlue;
-
-    const nau::math::vec3 xy0 = center + axisX * planeMin + axisY * planeMin;
-    const nau::math::vec3 xy1 = center + axisX * planeMax + axisY * planeMin;
-    const nau::math::vec3 xy2 = center + axisX * planeMin + axisY * planeMax;
-
-    dr.drawLine(nau::math::Point3(xy0), nau::math::Point3(xy1), lineColor, 1);
-    dr.drawLine(nau::math::Point3(xy1), nau::math::Point3(xy1 + axisY * (planeMax - planeMin)), lineColor, 1);
-    dr.drawLine(nau::math::Point3(xy2), nau::math::Point3(xy2 + axisX * (planeMax - planeMin)), lineColor, 1);
-    dr.drawLine(nau::math::Point3(xy0), nau::math::Point3(xy2), lineColor, 1);
-
-    lineColor = (m_hoveredAxes == AxisXZ) ? ColorYellow : ColorLtBlue;
-
-    const nau::math::vec3 xz0 = center + axisX * planeMin + axisZ * planeMin;
-    const nau::math::vec3 xz1 = center + axisX * planeMax + axisZ * planeMin;
-    const nau::math::vec3 xz2 = center + axisX * planeMin + axisZ * planeMax;
-
-    dr.drawLine(nau::math::Point3(xz0), nau::math::Point3(xz1), lineColor, 1);
-    dr.drawLine(nau::math::Point3(xz1), nau::math::Point3(xz1 + axisZ * (planeMax - planeMin)), lineColor, 1);
-    dr.drawLine(nau::math::Point3(xz2), nau::math::Point3(xz2 + axisX * (planeMax - planeMin)), lineColor, 1);
-    dr.drawLine(nau::math::Point3(xz0), nau::math::Point3(xz2), lineColor, 1);
-
-    lineColor = (m_hoveredAxes == AxisYZ) ? ColorYellow : ColorLtBlue;
-
-    const nau::math::vec3 yz0 = center + axisY * planeMin + axisZ * planeMin;
-    const nau::math::vec3 yz1 = center + axisY * planeMax + axisZ * planeMin;
-    const nau::math::vec3 yz2 = center + axisY * planeMin + axisZ * planeMax;
-
-    dr.drawLine(nau::math::Point3(yz0), nau::math::Point3(yz1), lineColor, 1);
-    dr.drawLine(nau::math::Point3(yz1), nau::math::Point3(yz1 + axisZ * (planeMax - planeMin)), lineColor, 1);
-    dr.drawLine(nau::math::Point3(yz2), nau::math::Point3(yz2 + axisY * (planeMax - planeMin)), lineColor, 1);
-    dr.drawLine(nau::math::Point3(yz0), nau::math::Point3(yz2), lineColor, 1);
+    drawPlaneHandle(axisX, axisY, (m_hoveredAxes == AxisXY) ? ColorYellow : ColorLtRed);
+    drawPlaneHandle(axisX, axisZ, (m_hoveredAxes == AxisXZ) ? ColorYellow : ColorLtBlue);
+    drawPlaneHandle(axisY, axisZ, (m_hoveredAxes == AxisYZ) ? ColorYellow : ColorLtGreen);
 }
 
 
