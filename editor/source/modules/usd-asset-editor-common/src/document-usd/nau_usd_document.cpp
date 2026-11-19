@@ -34,6 +34,12 @@ namespace
     // The local transform property. Its USD attribute and the op order aren't listed as properties.
     constexpr std::string_view TransformOpPrefix = "xformOp";
 
+    // Identity and type are node data, not properties: component and asset uids, and the engine class of a component
+    bool isNodeDataAttribute(const std::string& key)
+    {
+        return key == "uid" || key == "componentTypeName";
+    }
+
     // What a removed node needs to come back unchanged
     class NauUsdNodeSnapshotData final : public NauDocumentNodeSnapshotData
     {
@@ -468,7 +474,7 @@ std::vector<NauDocumentPropertyDescriptor> NauUsdDocument::properties(NauDocumen
 
     for (const auto& [name, property] : UsdProxy::UsdProxyPrim(found).getProperties()) {
         const std::string& key = name.GetString();
-        if (key.starts_with(TransformOpPrefix)) {
+        if (key.starts_with(TransformOpPrefix) || isNodeDataAttribute(key)) {
             continue;
         }
 
@@ -507,6 +513,10 @@ std::optional<NauDocumentValue> NauUsdDocument::property(NauDocumentNodeId id, c
         return NauUsdDocumentValues::toDocumentMatrix(NauUsdPrimUtils::localPrimTransform(found));
     }
 
+    if (isNodeDataAttribute(key)) {
+        return std::nullopt;
+    }
+
     const auto property = UsdProxy::UsdProxyPrim(found).getProperty(PXR_NS::TfToken(key));
     if (!property || !property->isValid()) {
         return std::nullopt;
@@ -535,6 +545,11 @@ bool NauUsdDocument::setProperty(NauDocumentNodeId id, const std::string& key, c
         OwnEdit ownEdit(*this);
         NauUsdPrimUtils::setPrimTransform(found, NauUsdDocumentValues::toUsdMatrix(*matrix));
         return true;
+    }
+
+    if (isNodeDataAttribute(key)) {
+        NED_WARNING("Usd document: {} is node data, not a property, on {}", key, found.GetPath().GetString());
+        return false;
     }
 
     const auto property = UsdProxy::UsdProxyPrim(found).getProperty(PXR_NS::TfToken(key));

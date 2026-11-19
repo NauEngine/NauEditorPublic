@@ -595,6 +595,33 @@ TEST_F(NauUsdDocumentTests, propertiesStartWithTransformAndSkipTransformOps)
     EXPECT_FALSE(intensity->hidden);
 }
 
+TEST_F(NauUsdDocumentTests, identityAndTypeAreNotProperties)
+{
+    // Arrange
+    defineXform("/Obj", "Obj", translation(0, 0, 0));
+    m_stage->GetPrimAtPath(PXR_NS::SdfPath("/Obj")).CreateAttribute(PXR_NS::TfToken("uid"), PXR_NS::SdfValueTypeNames->String).Set(std::string("uid"));
+    const NauDocumentNodeId light = createComponent(node("/Obj"), "Light");
+    const NauDocumentNodeId obj = node("/Obj");
+
+    // Act
+    const std::vector<NauDocumentPropertyDescriptor> objProperties = m_document->properties(obj);
+    const std::vector<NauDocumentPropertyDescriptor> lightProperties = m_document->properties(light);
+    const auto uid = m_document->property(obj, "uid");
+    const auto componentTypeName = m_document->property(light, "componentTypeName");
+    const bool setUid = m_document->setProperty(obj, "uid", std::string("other"));
+    const bool setComponentTypeName = m_document->setProperty(light, "componentTypeName", std::string("other"));
+
+    // Assert
+    EXPECT_EQ(findProperty(objProperties, "uid"), nullptr);
+    EXPECT_EQ(findProperty(lightProperties, "componentTypeName"), nullptr);
+    EXPECT_NE(findProperty(lightProperties, std::string(NauDocumentPropertyKeys::transform)), nullptr);
+    EXPECT_FALSE(uid.has_value());
+    EXPECT_FALSE(componentTypeName.has_value());
+    EXPECT_FALSE(setUid);
+    EXPECT_FALSE(setComponentTypeName);
+    EXPECT_EQ(m_document->nodeInfo(light)->typeName, TestComponentType);
+}
+
 TEST_F(NauUsdDocumentTests, setPropertyNarrowsToStoredType)
 {
     // Arrange
